@@ -45,11 +45,15 @@ class ProxyApp(object):
     pgturl_name = 'pgtUrl'
     
     def __init__(self, proxied_url, cas_info, fqdn=None, authorities=None):
+        if proxied_url.endswith('/'):
+            proxied_url = proxied_url[:-1]
         self.proxied_url = proxied_url
         p = urlparse.urlparse(proxied_url)
         self.p = p
         netloc = p.netloc
+        self.proxied_netloc = netloc
         self.proxied_host = netloc.split(':')[0]
+        self.proxied_path = p.path
         self.cas_info = cas_info
         
         cas_param_names = set([])
@@ -67,6 +71,9 @@ class ProxyApp(object):
         self.logout_tickets = {}
         
         self._make_agent(authorities)
+        
+        self.resource_handlers = {
+            '/grouperExternal/public/OwaspJavaScriptServlet': self.csrf_js_hack,}
 
     def _make_agent(self, auth_files):
         """
@@ -90,10 +97,25 @@ class ProxyApp(object):
                 
         if 'host' in keymap:
             for k in keymap['host']:
-                h[k] = [self.proxied_host]
+                h[k] = [self.proxied_netloc]
         if 'content-length' in keymap:
             for k in keymap['content-length']:
                 del h[k]
+                
+        if 'referer' in keymap:
+            for k in keymap['referer']:
+                del h[k]
+        if False:
+            keys = keymap['referer']
+            if len(keys) == 1:
+                k = keys[0]
+                values = h[k]
+                if len(values) == 1:
+                    referer = values[0]
+                    new_referer = self.proxy_url_to_proxied_url(referer)
+                    if new_referer is not None:
+                        h[k] = [new_referer]
+                        log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
         return h
 
     def _check_for_logout(self, request):
@@ -311,31 +333,112 @@ class ProxyApp(object):
         
         
     def reverse_proxy(self, request):
+        sess = request.getSession()
+        valid_sessions = self.valid_sessions
+        sess_uid = sess.uid
+        username = valid_sessions[sess_uid]['username']
         # Normal reverse proxying.
         kwds = {}
-        cookiejar = cookielib.CookieJar()
+        #cookiejar = cookielib.CookieJar()
+        cookiejar = {}
         kwds['agent'] = self.agent
+        kwds['allow_redirects'] = False
         kwds['cookies'] = cookiejar
-        kwds['headers'] = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
+        req_headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
+        kwds['headers'] = req_headers
+        kwds['headers']['REMOTE_USER'] = [username]
         #print "** HEADERS **"
         #pprint.pprint(self.mod_headers(dict(request.requestHeaders.getAllRawHeaders())))
         #print
         if request.method in ('PUT', 'POST'):
             kwds['data'] = request.content.read()
-        #print "request.method", request.method
-        #print "url", self.proxied_url + request.uri
-        #print "kwds:"
-        #pprint.pprint(kwds)
-        #print
-        d = treq.request(request.method, urlparse.urljoin(self.proxied_url, request.uri), **kwds)
+        print "request.method", request.method
+        print "url", self.proxied_url + request.uri
+        print "kwds:"
+        pprint.pprint(kwds)
+        print
+        url = self.proxied_url + request.uri
+        log.msg("[INFO] Proxying URL: %s" % url)
+        d = treq.request(request.method, url, **kwds)
         #print "** Requesting %s %s" % (request.method, self.proxied_url + request.uri)
-        def process_headers(response):
-            for k,v in response.headers.getAllRawHeaders():
-                print "Setting response header: %s: %s" % (k, v)
-                request.responseHeaders.setRawHeaders(k, v)
+        def process_headers(response, request):
+            req_resp_headers = request.responseHeaders
+            resp_code = response.code
+            resp_headers = response.headers
+            resp_header_map = dict(resp_headers.getAllRawHeaders())
+            if resp_code in (301, 302, 303, 307, 308) and "Location" in resp_header_map:
+                values = resp_header_map["Location"]
+                if len(values) == 1:
+                    location = values[0]
+                    new_location = self.proxied_url_to_proxy_url(location)
+                    if new_location is not None:
+                        resp_header_map['Location'] = [new_location]
+                        log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
+            request.setResponseCode(response.code, message=response.phrase)
+            for k,v in resp_header_map.iteritems():
+                print "Browser Response >>> Setting response header: %s: %s" % (k, v)
+                req_resp_headers.setRawHeaders(k, v)
             return response
-        d.addCallback(process_headers)
+            
+        def show_cookies(resp):
+            jar = resp.cookies()
+            print "Cookie Jar:"
+            pprint.pprint(cookiejar)
+            print ""
+            return resp
+            
+        def mod_content(body, request):
+            """
+            """
+            handler = self.resource_handlers.get(request.uri)
+            if handler is not None:
+                body = handler(body)
+            return body
+            
+        d.addCallback(show_cookies)
+        d.addCallback(process_headers, request)
         d.addCallback(treq.content)
+        d.addCallback(mod_content, request)
         return d
     
+    def proxied_url_to_proxy_url(self, target_url):
+        """
+        """
+        p = urlparse.urlparse(target_url)
+        if p.netloc == self.proxied_netloc:
+            target_path = p.path
+            proxied_path = self.proxied_path
+            if p.path.startswith(proxied_path):
+                new_target_path = target_path[len(proxied_path):]
+                proxy_netloc = "%s:%d" % (self.fqdn, self.port)
+                p = urlparse.ParseResult(*tuple(p[:1] + (proxy_netloc, new_target_path) + p[3:]))
+                new_target_url = urlparse.urlunparse(p)
+                return new_target_url
+        return None
+        
+    def proxy_url_to_proxied_url(self, target_url):
+        """
+        """
+        proxied_netloc = self.proxied_netloc
+        proxy_netloc = "%s:%d" % (self.fqdn, self.port)
+        p = urlparse.urlparse(target_url)
+        if p.netloc == proxy_netloc:
+            target_path = p.path
+            proxied_path = self.proxied_path
+            if target_path == '':
+                new_target_path = proxied_path
+            else:
+                if not target_path.startswith('/'):
+                    target_path = '/' + target_path
+                new_target_path = proxied_path + target_path
+            p = urlparse.ParseResult(*tuple(p[:1] + (proxied_netloc, new_target_path) + p[3:]))
+            new_target_url = urlparse.urlunparse(p)
+            return new_target_url
+        return None
+        
+    def csrf_js_hack(self, s):
+        """
+        """
+        s = s.replace(self.proxied_host, self.fqdn)
+        return s
 
