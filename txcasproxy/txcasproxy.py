@@ -98,6 +98,9 @@ class ProxyApp(object):
         if 'host' in keymap:
             for k in keymap['host']:
                 h[k] = [self.proxied_netloc]
+        if 'origin' in keymap:
+            for k in keymap['origin']:
+                h[k] = [self.proxied_netloc]
         if 'content-length' in keymap:
             for k in keymap['content-length']:
                 del h[k]
@@ -440,5 +443,7 @@ class ProxyApp(object):
         """
         """
         s = s.replace(self.proxied_host, self.fqdn)
+        s = s.replace('''part = "/grouper/" + url;''', '''part = "/" + url;''')
+        s = s.replace('''"/grouper/grouperExternal/public/OwaspJavaScriptServlet"''', '''"/grouperExternal/public/OwaspJavaScriptServlet"''');
         return s
 
