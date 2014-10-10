@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
 #Standard library
+import Cookie
 import cookielib
 import datetime
 import os.path
@@ -379,6 +380,8 @@ class ProxyApp(object):
                         log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
             request.setResponseCode(response.code, message=response.phrase)
             for k,v in resp_header_map.iteritems():
+                if k == 'Set-Cookie':
+                    v = self.mod_cookies(v)
                 print "Browser Response >>> Setting response header: %s: %s" % (k, v)
                 req_resp_headers.setRawHeaders(k, v)
             return response
@@ -403,6 +406,36 @@ class ProxyApp(object):
         d.addCallback(treq.content)
         d.addCallback(mod_content, request)
         return d
+    
+    def mod_cookies(self, value_list):
+        """
+        """
+        proxied_path = self.proxied_path
+        proxied_path_size = len(proxied_path)
+        results = []
+        for cookie_value in value_list:
+            c = Cookie.SimpleCookie()
+            c.load(cookie_value)
+            for k in c.keys():
+                m = c[k]
+                if m.has_key('path'):
+                    m_path = m['path']
+                    if self.is_proxy_path_or_child(m_path):
+                        m_path = m_path[proxied_path_size:]
+                        m['path'] = m_path
+            results.append(c.output(header='')[1:])
+        return results
+                     
+    def is_proxy_path_or_child(self, path):
+        """
+        """
+        proxied_path = self.proxied_path
+        if path == proxied_path:
+            return True
+        if path.startswith(proxied_path):
+            if path[len(proxied_path)] == '/':
+                return True
+        return False
     
     def proxied_url_to_proxy_url(self, target_url):
         """
