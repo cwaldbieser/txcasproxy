@@ -244,13 +244,17 @@ class ProxyApp(object):
         login_url = cas_info['login_url']
                 
         p = urlparse.urlparse(login_url)
-        params = {self.service_name: self.get_url(request)}
+        
+        params = {self.service_name: self.intercept_service_url(self.get_url(request), request)}
     
-        if p.params == '':
+        if p.query == '':
             param_str = urlencode(params)
         else:
-            param_str = p.params + '&' + urlencode(params)
+            qs_map = urlparse.parse_qs(p.query)
+            qs_map.update(params)
+            param_str = urlencode(qs_map)
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
+        
         url = urlparse.urlunparse(p)
         d = request.redirect(url)
         return d
@@ -263,7 +267,7 @@ class ProxyApp(object):
         
         this_url = self.get_url(request)
         p = urlparse.urlparse(this_url)
-        qs_map = urlparse.parse_qs(p.params)
+        qs_map = urlparse.parse_qs(p.query)
         if ticket_name in qs_map:
             del qs_map[ticket_name]
         param_str = urlencode(qs_map)
@@ -356,20 +360,21 @@ class ProxyApp(object):
         #print
         if request.method in ('PUT', 'POST'):
             kwds['data'] = request.content.read()
-        print "request.method", request.method
-        print "url", self.proxied_url + request.uri
-        print "kwds:"
-        pprint.pprint(kwds)
-        print
+        #print "request.method", request.method
+        #print "url", self.proxied_url + request.uri
+        #print "kwds:"
+        #pprint.pprint(kwds)
+        #print
         url = self.proxied_url + request.uri
         log.msg("[INFO] Proxying URL: %s" % url)
         d = treq.request(request.method, url, **kwds)
         #print "** Requesting %s %s" % (request.method, self.proxied_url + request.uri)
-        def process_headers(response, request):
+        def process_response(response, request):
             req_resp_headers = request.responseHeaders
             resp_code = response.code
             resp_headers = response.headers
             resp_header_map = dict(resp_headers.getAllRawHeaders())
+            # Rewrite Location headers for redirects as required.
             if resp_code in (301, 302, 303, 307, 308) and "Location" in resp_header_map:
                 values = resp_header_map["Location"]
                 if len(values) == 1:
@@ -402,7 +407,7 @@ class ProxyApp(object):
             return body
             
         d.addCallback(show_cookies)
-        d.addCallback(process_headers, request)
+        d.addCallback(process_response, request)
         d.addCallback(treq.content)
         d.addCallback(mod_content, request)
         return d
@@ -479,4 +484,19 @@ class ProxyApp(object):
         s = s.replace('''part = "/grouper/" + url;''', '''part = "/" + url;''')
         s = s.replace('''"/grouper/grouperExternal/public/OwaspJavaScriptServlet"''', '''"/grouperExternal/public/OwaspJavaScriptServlet"''');
         return s
+
+    def intercept_service_url(self, service_url, request):
+        """
+        """
+        # Handle AJAX error failure CAS interception.
+        p = urlparse.urlparse(service_url)
+        params = urlparse.parse_qs(p.query)
+        values = params.get('code', None)
+        if values is not None and 'ajaxError' in values:
+            p = urlparse.ParseResult(*tuple(p[:2] + ('/',) + p[3:4] + ('',) + p[5:]))
+            url = urlparse.urlunparse(p)
+            return url
+        # Nothing to intercept.
+        return service_url
+                    
 
