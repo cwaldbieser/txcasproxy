@@ -12,6 +12,7 @@ import urlparse
 
 # Application modules
 from ca_trust import CustomPolicyForHTTPS
+from interfaces import IRProxyInfoAcceptor
 import proxyutils
 
 #External modules
@@ -46,7 +47,14 @@ class ProxyApp(object):
     renew_name = 'renew'
     pgturl_name = 'pgtUrl'
     
-    def __init__(self, proxied_url, cas_info, fqdn=None, authorities=None):
+    def __init__(
+                self, 
+                proxied_url, 
+                cas_info, 
+                fqdn=None, 
+                authorities=None, 
+                content_modifiers=None):
+            
         if proxied_url.endswith('/'):
             proxied_url = proxied_url[:-1]
         self.proxied_url = proxied_url
@@ -74,8 +82,25 @@ class ProxyApp(object):
         
         self._make_agent(authorities)
         
-        self.resource_handlers = {
-            '/grouperExternal/public/OwaspJavaScriptServlet': self.csrf_js_hack,}
+        if content_modifiers is None:
+            content_modifiers = []
+        self.content_modifiers = content_modifiers
+
+    def handle_port_set(self):
+        """
+        """
+        fqdn = self.fqdn
+        port = self.port
+        proxied_netloc = self.proxied_netloc
+        proxied_path = self.proxied_path
+        
+        for plugin in self.content_modifiers:
+            if IRProxyInfoAcceptor.providedBy(plugin):
+                plugin.proxy_fqdn = fqdn
+                plugin.proxy_port = port
+                plugin.proxied_netloc = proxied_netloc
+                plugin.proxied_path = proxied_path
+                plugin.handle_rproxy_info_set()
 
     def _make_agent(self, auth_files):
         """
@@ -409,9 +434,8 @@ class ProxyApp(object):
         def mod_content(body, request):
             """
             """
-            handler = self.resource_handlers.get(request.uri)
-            if handler is not None:
-                body = handler(body)
+            for content_modifier in self.content_modifiers:
+                body = content_modifier.transform_content(body, request)
             return body
             
         d.addCallback(show_cookies)
@@ -469,7 +493,7 @@ class ProxyApp(object):
         """
         s = s.replace(self.proxied_host, self.fqdn)
         s = s.replace('''part = "/grouper/" + url;''', '''part = "/" + url;''')
-        s = s.replace('''"/grouper/grouperExternal/public/OwaspJavaScriptServlet"''', '''"/grouperExternal/public/OwaspJavaScriptServlet"''');
+        s = s.replace('''"/grouper/grouperExternal/public/OwaspJavaScriptServlet"''', '''"/grouperExternal/public/OwaspJavaScriptServlet"''')
         return s
 
     def intercept_service_url(self, service_url, request):

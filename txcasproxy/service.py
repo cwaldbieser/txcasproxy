@@ -16,14 +16,26 @@ class ProxyService(Service):
     Service 
     """
 
-    def __init__(self, endpoint_s, proxied_url, cas_info, fqdn=None, authorities=None): 
+    def __init__(
+            self, 
+            endpoint_s, 
+            proxied_url, 
+            cas_info, 
+            fqdn=None, 
+            authorities=None,
+            content_modifiers=None): 
         """
         """
         self.port_s = endpoint_s
 
         # Create the application. 
         cas_info = cas_info
-        app = ProxyApp(proxied_url, cas_info, fqdn=fqdn, authorities=authorities)
+        app = ProxyApp(
+            proxied_url, 
+            cas_info, 
+            fqdn=fqdn, 
+            authorities=authorities,
+            content_modifiers=content_modifiers)
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
@@ -43,4 +55,4 @@ class ProxyService(Service):
         host = lp.getHost()
         print "Setting port %d ..." % host.port
         self.app.port = host.port
-
+        self.app.handle_port_set()

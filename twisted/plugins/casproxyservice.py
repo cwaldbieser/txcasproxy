@@ -3,19 +3,37 @@
 import sys
 
 # Application modules
+from txcasproxy.interfaces import IRProxyPluginFactory, IResourceModifier
 from txcasproxy.service import ProxyService
 
 # External modules
 from twisted.application.service import IServiceMaker
-from twisted.plugin import IPlugin
+from twisted.plugin import getPlugins, IPlugin
 from twisted.python import usage
 from zope.interface import implements
 
 
+def format_plugin_help_list(factories, stm):
+     """
+     Show plugin list with brief usage..
+     """
+     # Figure out the right width for our columns
+     firstLength = 0
+     for factory in factories:
+         if len(factory.tag) > firstLength:
+             firstLength = len(factory.tag)
+     formatString = '  %%-%is\t%%s\n' % firstLength
+     stm.write(formatString % ('Plugin', 'ArgString format'))
+     stm.write(formatString % ('======', '================'))
+     for factory in factories:
+         stm.write(
+             formatString % (factory.tag, factory.opt_usage))
+     stm.write('\n')
+
 class Options(usage.Options):
-    #optFlags = [
-    #        ["flag", "f", "A flag."],
-    #    ]
+    optFlags = [
+            ["help-plugins", None, "Help about available plugins."],
+        ]
 
     optParameters = [
                         ["endpoint", "e", None, "An endpoint connection string."],
@@ -28,12 +46,23 @@ class Options(usage.Options):
     def __init__(self):
         usage.Options.__init__(self)
         self['authorities'] = []
+        self['plugins'] = []
+        self.valid_plugins = set([])
+        for factory in getPlugins(IRProxyPluginFactory):
+            if hasattr(factory, 'tag'):
+                self.valid_plugins.add(factory.tag)
 
     def opt_addCA(self, pem_path):
         """
         Add a trusted CA public cert (PEM format).
         """
         self['authorities'].append(pem_path)
+        
+    def opt_plugin(self, name):
+        """
+        Include a plugin.
+        """
+        self['plugins'].append(name)
 
     def postOptions(self):
         if self['endpoint'] is None:
@@ -50,6 +79,11 @@ class Options(usage.Options):
             self['cas-service-validate'] = serviceValidate
             del parts
             del login
+        bad_tags = [tag for tag in self['plugins'] if tag not in self.valid_plugins]
+        if len(bad_tags) > 0:
+            bad_tags.sort()
+            msg = "The following plugins are not valid: %s." % (', '.join(bad_tags))
+            raise usage.UsageError(msg)
 
 class MyServiceMaker(object):
     implements(IServiceMaker, IPlugin)
@@ -60,20 +94,49 @@ class MyServiceMaker(object):
     def makeService(self, options):
         """
         """
+        factories = [f for f in getPlugins(IRProxyPluginFactory) 
+                        if hasattr(f, 'tag') and hasattr(f, 'opt_usage')]
+        if options['help-plugins']:
+            format_plugin_help_list(factories, sys.stderr)
+            sys.exit(0)
+            
         cas_info = dict(
             login_url=options['cas-login'],
             service_validate_url=options['cas-service-validate'])
         fqdn = options.get('fqdn', None)
+        
+        # Load plugins.
+        plugin_opts = {}
+        for plugin_arg in options['plugins']:
+            parts = plugin_arg.split(':', 2)
+            name = parts[0]
+            if len(parts) > 1:
+                args = parts[1]
+            else:
+                args = ''
+            plugin_opts.setdefault(name, []).append(args)
+        content_modifiers = []
+        for factory in factories:
+            tag = factory.tag
+            if tag in plugin_opts:
+                arglst = plugin_opts[tag]
+                for argstr in arglst:
+                    plugin = factory.generatePlugin(argstr)
+                    if IResourceModifier.providedBy(plugin):
+                        content_modifiers.append(plugin)
+        
         # Create the service.
         return ProxyService(
             endpoint_s=options['endpoint'], 
             proxied_url=options['proxied-url'],
             cas_info=cas_info,
             fqdn=fqdn,
-            authorities=options['authorities']) 
+            authorities=options['authorities'],
+            content_modifiers=content_modifiers) 
 
 # Now construct an object which *provides* the relevant interfaces
 # The name of this variable is irrelevant, as long as there is *some*
 # name bound to a provider of IPlugin and IServiceMaker.
 
 serviceMaker = MyServiceMaker()
+
