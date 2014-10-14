@@ -12,6 +12,7 @@ import urlparse
 
 # Application modules
 from ca_trust import CustomPolicyForHTTPS
+import proxyutils
 
 #External modules
 from dateutil.parser import parse as parse_date
@@ -441,48 +442,27 @@ class ProxyApp(object):
     def is_proxy_path_or_child(self, path):
         """
         """
-        proxied_path = self.proxied_path
-        if path == proxied_path:
-            return True
-        if path.startswith(proxied_path):
-            if path[len(proxied_path)] == '/':
-                return True
-        return False
+        return proxyutils.is_proxy_path_or_child(self.proxied_path, path)
     
     def proxied_url_to_proxy_url(self, target_url):
         """
         """
-        p = urlparse.urlparse(target_url)
-        if p.netloc == self.proxied_netloc:
-            target_path = p.path
-            proxied_path = self.proxied_path
-            if p.path.startswith(proxied_path):
-                new_target_path = target_path[len(proxied_path):]
-                proxy_netloc = "%s:%d" % (self.fqdn, self.port)
-                p = urlparse.ParseResult(*tuple(p[:1] + (proxy_netloc, new_target_path) + p[3:]))
-                new_target_url = urlparse.urlunparse(p)
-                return new_target_url
-        return None
+        return proxyutils.proxied_url_to_proxy_url(
+            self.fqdn, 
+            self.port, 
+            self.proxied_netloc, 
+            self.proxied_path, 
+            target_url)
         
     def proxy_url_to_proxied_url(self, target_url):
         """
         """
-        proxied_netloc = self.proxied_netloc
-        proxy_netloc = "%s:%d" % (self.fqdn, self.port)
-        p = urlparse.urlparse(target_url)
-        if p.netloc == proxy_netloc:
-            target_path = p.path
-            proxied_path = self.proxied_path
-            if target_path == '':
-                new_target_path = proxied_path
-            else:
-                if not target_path.startswith('/'):
-                    target_path = '/' + target_path
-                new_target_path = proxied_path + target_path
-            p = urlparse.ParseResult(*tuple(p[:1] + (proxied_netloc, new_target_path) + p[3:]))
-            new_target_url = urlparse.urlunparse(p)
-            return new_target_url
-        return None
+        return proxyutils.proxy_url_to_proxied_url(
+            self.fqdn, 
+            self.port, 
+            self.proxied_netloc,
+            self.proxied_path,
+            target_url)
         
     def csrf_js_hack(self, s):
         """
