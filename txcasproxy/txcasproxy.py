@@ -11,7 +11,7 @@ from urllib import urlencode
 import urlparse
 
 # Application modules
-from ca_trust import MyCATrustRoot
+from ca_trust import CustomPolicyForHTTPS
 
 #External modules
 from dateutil.parser import parse as parse_date
@@ -82,9 +82,16 @@ class ProxyApp(object):
         if auth_files is None or len(auth_files) == 0:
             self.agent = None
         else:
-            trustRoot = MyCATrustRoot(extra_cert_paths=auth_files)
-            contextFactory = BrowserLikePolicyForHTTPS(trustRoot)
-            agent = Agent(reactor, contextFactory=contextFactory)
+            extra_ca_certs = []
+            for ca_cert in auth_files:
+                with open(ca_cert, "rb") as f:
+                    data = f.read()
+                cert = crypto.load_certificate(crypto.FILETYPE_PEM, data)
+                del data
+                extra_ca_certs.append(cert)
+            
+            policy = CustomPolicyForHTTPS(extra_ca_certs)
+            agent = Agent(reactor, contextFactory=policy)
             self.agent = agent
 
     def mod_headers(self, h):
