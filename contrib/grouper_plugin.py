@@ -41,6 +41,7 @@ class GrouperPlugin(object):
     
     proxy_fqdn = None
     proxy_port = 443
+    proxied_scheme = 'http'
     proxied_netloc = '127.0.0.1:8443'
     proxied_path = '/'
     
@@ -54,7 +55,9 @@ class GrouperPlugin(object):
         self.kwds = kwds
         
     def handle_rproxy_info_set(self):
-        pass
+        proxied_netloc = self.proxied_netloc
+        parts = proxied_netloc.split(":", 2)
+        self.proxied_host = parts[0]
         
     def transform_content(self, content, request):
         """
@@ -78,7 +81,8 @@ class GrouperPlugin(object):
             self.proxied_path, 
             url)
         
-        if proxied_url == self.owasp_js_servlet_resource:
+        p = urlparse.urlparse(proxied_url)
+        if p.path == self.owasp_js_servlet_resource:
             return defer.succeed(self.csrf_js_hack(content))
             
         return content
@@ -86,7 +90,7 @@ class GrouperPlugin(object):
     def csrf_js_hack(self, s):
         """
         """
-        s = s.replace(self.proxied_host, self.fqdn)
+        s = s.replace(self.proxied_host, self.proxy_fqdn)
         s = s.replace('''part = "/grouper/" + url;''', '''part = "/" + url;''')
         s = s.replace(
             self.owasp_js_servlet_resource, 

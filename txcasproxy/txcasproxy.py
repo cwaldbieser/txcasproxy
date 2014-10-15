@@ -61,6 +61,7 @@ class ProxyApp(object):
         self.proxied_url = proxied_url
         p = urlparse.urlparse(proxied_url)
         self.p = p
+        self.proxied_scheme = p.scheme
         netloc = p.netloc
         self.proxied_netloc = netloc
         self.proxied_host = netloc.split(':')[0]
@@ -107,12 +108,14 @@ class ProxyApp(object):
         """
         fqdn = self.fqdn
         port = self.port
+        proxied_scheme = self.proxied_scheme
         proxied_netloc = self.proxied_netloc
         proxied_path = self.proxied_path
         
         for plugin in self.info_acceptors:
             plugin.proxy_fqdn = fqdn
             plugin.proxy_port = port
+            plugin.proxied_scheme = proxied_scheme
             plugin.proxied_netloc = proxied_netloc
             plugin.proxied_path = proxied_path
             plugin.handle_rproxy_info_set()

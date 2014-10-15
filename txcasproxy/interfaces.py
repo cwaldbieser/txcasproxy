@@ -14,6 +14,7 @@ class IRProxyInfoAcceptor(Interface):
     
     proxy_fqdn = Attribute("Proxy fqdn.")
     proxy_port = Attribute("Proxy port.")
+    proxied_scheme = Attribute("Proxied scheme.")
     proxied_netloc = Attribute("Proxied netloc.")
     proxied_path = Attribute("Proxied path.")
     
