@@ -22,11 +22,20 @@ class IRProxyInfoAcceptor(Interface):
         Event triggered after reverse proxy information has been set.
         """
 
-class IResourceModifier(Interface):
+class IResponseContentModifier(Interface):
     
     mod_sequence = Attribute('Sequence number.')
     
     def transform_content(content, request):
         """
         Transform `content`
+        """
+
+class ICASRedirectHandler(Interface):
+    
+    cas_redirect_sequence = Attribute("Sequence number.")
+    
+    def intercept_service_url(service_url, request):
+        """
+        Inspect and return a modified or unmodified service URL.
         """

@@ -23,7 +23,7 @@ class ProxyService(Service):
             cas_info, 
             fqdn=None, 
             authorities=None,
-            content_modifiers=None): 
+            plugins=None): 
         """
         """
         self.port_s = endpoint_s
@@ -35,7 +35,7 @@ class ProxyService(Service):
             cas_info, 
             fqdn=fqdn, 
             authorities=authorities,
-            content_modifiers=content_modifiers)
+            plugins=plugins)
         root = app.app.resource()
         self.app = app
         self.site = Site(root)

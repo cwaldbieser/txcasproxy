@@ -12,7 +12,8 @@ import urlparse
 
 # Application modules
 from ca_trust import CustomPolicyForHTTPS
-from interfaces import IRProxyInfoAcceptor
+from interfaces import IRProxyInfoAcceptor, IResponseContentModifier, \
+                ICASRedirectHandler
 import proxyutils
 
 #External modules
@@ -23,7 +24,7 @@ from OpenSSL import crypto
 
 import treq
 #from twisted.internet.defer import inlineCallbacks
-from twisted.internet import reactor
+from twisted.internet import defer, reactor
 from twisted.internet.ssl import Certificate
 from twisted.python import log
 import twisted.web.client as twclient
@@ -53,7 +54,7 @@ class ProxyApp(object):
                 cas_info, 
                 fqdn=None, 
                 authorities=None, 
-                content_modifiers=None):
+                plugins=None):
             
         if proxied_url.endswith('/'):
             proxied_url = proxied_url[:-1]
@@ -82,9 +83,24 @@ class ProxyApp(object):
         
         self._make_agent(authorities)
         
-        if content_modifiers is None:
-            content_modifiers = []
+        # Sort/tag plugins
+        if plugins is None:
+            plugins = []
+        content_modifiers = []
+        info_acceptors = []
+        cas_redirect_handlers = []
+        for plugin in plugins:
+            if IResponseContentModifier.providedBy(plugin):
+                content_modifiers.append(plugin)
+            if IRProxyInfoAcceptor.providedBy(plugin):
+                info_acceptors.append(plugin)
+            if ICASRedirectHandler.providedBy(plugin):
+                cas_redirect_handlers.append(plugin)
+        self.info_acceptors = info_acceptors
+        content_modifiers.sort(key=lambda x: x.mod_sequence)
         self.content_modifiers = content_modifiers
+        cas_redirect_handlers.sort(key=lambda x: x.cas_redirect_sequence)
+        self.cas_redirect_handlers = cas_redirect_handlers
 
     def handle_port_set(self):
         """
@@ -94,13 +110,12 @@ class ProxyApp(object):
         proxied_netloc = self.proxied_netloc
         proxied_path = self.proxied_path
         
-        for plugin in self.content_modifiers:
-            if IRProxyInfoAcceptor.providedBy(plugin):
-                plugin.proxy_fqdn = fqdn
-                plugin.proxy_port = port
-                plugin.proxied_netloc = proxied_netloc
-                plugin.proxied_path = proxied_path
-                plugin.handle_rproxy_info_set()
+        for plugin in self.info_acceptors:
+            plugin.proxy_fqdn = fqdn
+            plugin.proxy_port = port
+            plugin.proxied_netloc = proxied_netloc
+            plugin.proxied_path = proxied_path
+            plugin.handle_rproxy_info_set()
 
     def _make_agent(self, auth_files):
         """
@@ -272,13 +287,31 @@ class ProxyApp(object):
         
     def redirect_to_cas_login(self, request):
         """
+        Begin the CAS redirection process.
+        """        
+        service_url = self.get_url(request)
+        d = None
+        for plugin in self.cas_redirect_handlers:
+            if d is None:
+                d = defer.maybeDeferred(plugin.intercept_service_url, service_url, request)
+            else:
+                d.addCallback(plugin.intercept_service_url, request)
+        if d is None:
+            return self.complete_redirect_to_cas_login(service_url, request)
+        else:
+            d.addCallback(self.complete_redirect_to_cas_login, request)
+            return d
+                
+    def complete_redirect_to_cas_login(self, service_url, request):
+        """
+        Complete the CAS redirection process.
+        Return a deferred that will redirect the user-agent to the CAS login.
         """
         cas_info = self.cas_info
         login_url = cas_info['login_url']
                 
         p = urlparse.urlparse(login_url)
-        
-        params = {self.service_name: self.intercept_service_url(self.get_url(request), request)}
+        params = {self.service_name: service_url}
     
         if p.query == '':
             param_str = urlencode(params)
@@ -433,10 +466,18 @@ class ProxyApp(object):
             
         def mod_content(body, request):
             """
+            Modify response content before returning it to the user agent.
             """
+            d = None
             for content_modifier in self.content_modifiers:
-                body = content_modifier.transform_content(body, request)
-            return body
+                if d is None:
+                    d = content_modifier.transform_content(body, request)
+                else:
+                    d.addCallback(content_modifier.transform_content, request)
+            if d is None:
+                return body
+            else:
+                return d
             
         d.addCallback(show_cookies)
         d.addCallback(process_response, request)
@@ -487,27 +528,6 @@ class ProxyApp(object):
             self.proxied_netloc,
             self.proxied_path,
             target_url)
-        
-    def csrf_js_hack(self, s):
-        """
-        """
-        s = s.replace(self.proxied_host, self.fqdn)
-        s = s.replace('''part = "/grouper/" + url;''', '''part = "/" + url;''')
-        s = s.replace('''"/grouper/grouperExternal/public/OwaspJavaScriptServlet"''', '''"/grouperExternal/public/OwaspJavaScriptServlet"''')
-        return s
 
-    def intercept_service_url(self, service_url, request):
-        """
-        """
-        # Handle AJAX error failure CAS interception.
-        p = urlparse.urlparse(service_url)
-        params = urlparse.parse_qs(p.query)
-        values = params.get('code', None)
-        if values is not None and 'ajaxError' in values:
-            p = urlparse.ParseResult(*tuple(p[:2] + ('/',) + p[3:4] + ('',) + p[5:]))
-            url = urlparse.urlunparse(p)
-            return url
-        # Nothing to intercept.
-        return service_url
                     
 

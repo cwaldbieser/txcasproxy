@@ -7,10 +7,11 @@ import urlparse
 
 # Application modules
 from txcasproxy.interfaces import IRProxyPluginFactory, IRProxyInfoAcceptor, \
-                            IResourceModifier
+                            IResponseContentModifier, ICASRedirectHandler
 from txcasproxy import proxyutils
 
 # External modules
+from twisted.internet import defer
 from twisted.plugin import IPlugin
 from zope.interface import implements
 
@@ -36,7 +37,7 @@ class GrouperPluginFactory(object):
 
 class GrouperPlugin(object):
     
-    implements(IRProxyInfoAcceptor, IResourceModifier)
+    implements(IRProxyInfoAcceptor, IResponseContentModifier, ICASRedirectHandler)
     
     proxy_fqdn = None
     proxy_port = 443
@@ -44,6 +45,8 @@ class GrouperPlugin(object):
     proxied_path = '/'
     
     mod_sequence = 7
+    
+    cas_redirect_sequence = 7
     
     owasp_js_servlet_resource = '/grouper/grouperExternal/public/OwaspJavaScriptServlet'
     
@@ -76,7 +79,7 @@ class GrouperPlugin(object):
             url)
         
         if proxied_url == self.owasp_js_servlet_resource:
-            return self.csrf_js_hack(content)
+            return defer.succeed(self.csrf_js_hack(content))
             
         return content
             
@@ -90,6 +93,20 @@ class GrouperPlugin(object):
             self.owasp_js_servlet_resource[len(self.proxied_path):])
         return s
         
+    def intercept_service_url(self, service_url, request):
+        """
+        If there was an AJAX error, set the service URL to the login URL.
+        """
+        # Handle AJAX error failure CAS interception.
+        p = urlparse.urlparse(service_url)
+        params = urlparse.parse_qs(p.query)
+        values = params.get('code', None)
+        if values is not None and 'ajaxError' in values:
+            p = urlparse.ParseResult(*tuple(p[:2] + ('/',) + p[3:4] + ('',) + p[5:]))
+            url = urlparse.urlunparse(p)
+            return url
+        # Nothing to intercept.
+        return defer.succeed(service_url)
         
         
 def qsmap_to_qslist(qsmap):

@@ -3,7 +3,7 @@
 import sys
 
 # Application modules
-from txcasproxy.interfaces import IRProxyPluginFactory, IResourceModifier
+from txcasproxy.interfaces import IRProxyPluginFactory
 from txcasproxy.service import ProxyService
 
 # External modules
@@ -115,15 +115,14 @@ class MyServiceMaker(object):
             else:
                 args = ''
             plugin_opts.setdefault(name, []).append(args)
-        content_modifiers = []
+        plugins = []
         for factory in factories:
             tag = factory.tag
             if tag in plugin_opts:
                 arglst = plugin_opts[tag]
                 for argstr in arglst:
                     plugin = factory.generatePlugin(argstr)
-                    if IResourceModifier.providedBy(plugin):
-                        content_modifiers.append(plugin)
+                    plugins.append(plugin)
         
         # Create the service.
         return ProxyService(
@@ -132,7 +131,7 @@ class MyServiceMaker(object):
             cas_info=cas_info,
             fqdn=fqdn,
             authorities=options['authorities'],
-            content_modifiers=content_modifiers) 
+            plugins=plugins) 
 
 # Now construct an object which *provides* the relevant interfaces
 # The name of this variable is irrelevant, as long as there is *some*
