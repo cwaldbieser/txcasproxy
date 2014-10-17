@@ -448,7 +448,11 @@ class ProxyApp(object):
                 values = resp_header_map["Location"]
                 if len(values) == 1:
                     location = values[0]
-                    new_location = self.proxied_url_to_proxy_url(location)
+                    if request.isSecure():
+                        proxy_scheme = 'https'
+                    else:
+                        proxy_scheme = 'http'
+                    new_location = self.proxied_url_to_proxy_url(proxy_scheme, location)
                     if new_location is not None:
                         resp_header_map['Location'] = [new_location]
                         log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
@@ -512,10 +516,11 @@ class ProxyApp(object):
         """
         return proxyutils.is_proxy_path_or_child(self.proxied_path, path)
     
-    def proxied_url_to_proxy_url(self, target_url):
+    def proxied_url_to_proxy_url(self, proxy_scheme, target_url):
         """
         """
         return proxyutils.proxied_url_to_proxy_url(
+            proxy_scheme,
             self.fqdn, 
             self.port, 
             self.proxied_netloc, 
@@ -526,6 +531,7 @@ class ProxyApp(object):
         """
         """
         return proxyutils.proxy_url_to_proxied_url(
+            self.proxied_scheme,
             self.fqdn, 
             self.port, 
             self.proxied_netloc,

@@ -75,6 +75,7 @@ class GrouperPlugin(object):
         netloc = "%s:%d" % (self.proxy_fqdn, self.proxy_port)
         url = urlparse.urlunparse((scheme, netloc, path, params, query, fragment))
         proxied_url = proxyutils.proxy_url_to_proxied_url(
+            self.proxied_scheme,
             self.proxy_fqdn, 
             self.proxy_port, 
             self.proxied_netloc, 
