@@ -12,6 +12,7 @@ pyasn1-modules==0.0.5
 pycparser==2.10
 service-identity==14.0.0
 six==1.8.0
-treq==0.2.1
+git+https://github.com/cwaldbieser/treq.git
 wsgiref==0.1.2
 zope.interface==4.1.1
+python-dateutil==2.2
