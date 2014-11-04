@@ -1,4 +1,4 @@
 
-from contrib.grouper_plugin import GrouperPluginFactory
+from contrib.grouper.grouper_plugin import GrouperPluginFactory
 
 factory = GrouperPluginFactory()

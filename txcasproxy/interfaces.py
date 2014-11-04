@@ -17,6 +17,7 @@ class IRProxyInfoAcceptor(Interface):
     proxied_scheme = Attribute("Proxied scheme.")
     proxied_netloc = Attribute("Proxied netloc.")
     proxied_path = Attribute("Proxied path.")
+    expire_session = Attribute("Expire a session.")
     
     def handle_rproxy_info_set():
         """
@@ -31,6 +32,25 @@ class IResponseContentModifier(Interface):
         """
         Transform `content`
         """
+
+class IResourceInterceptor(Interface):
+    
+    interceptor_sequence = Attribute("Sequence number.")
+    
+    def should_resource_be_intercepted(url, method, headers, proxy_request):
+        """
+        Return True if resource should be intercepted.
+        """
+        
+    def handle_resource(url, method, headers, proxy_request):
+        """
+        Return a deferred that fires the response body or a response body.
+        """
+
+class IStaticResourceProvider(Interface):
+    
+    static_resource_base = Attribute("Static resource base.")
+    static_resource_dir = Attribute("Static resource folder.")
 
 class ICASRedirectHandler(Interface):
     

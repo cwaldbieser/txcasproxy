@@ -1,0 +1,46 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="{{static_path|e}}/icon/favicon.ico">
+
+    <title>Logout</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="{{static_path|e}}/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="{{static_path|e}}/css/jumbotron-narrow.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="container">
+
+        <div class="jumbotron">
+            <h1>Logout</h1>
+            <p>
+                You have logged out of Grouper.
+                <a href="/">Log back in?</a>
+            </p>
+            {%if cas_logout_url %}
+            <p>
+                OR <a href="{{cas_logout_url|e}}">Log out of your Single Sign-On session?</a>
+            </p>
+            {%endif%}
+        </div>
+      
+
+    </div> <!-- /container -->
+
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+  </body>
+</html>

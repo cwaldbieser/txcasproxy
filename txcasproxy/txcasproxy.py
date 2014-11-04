@@ -13,7 +13,8 @@ import urlparse
 # Application modules
 from ca_trust import CustomPolicyForHTTPS
 from interfaces import IRProxyInfoAcceptor, IResponseContentModifier, \
-                ICASRedirectHandler
+                ICASRedirectHandler, IResourceInterceptor, \
+                IStaticResourceProvider
 import proxyutils
 
 #External modules
@@ -90,6 +91,7 @@ class ProxyApp(object):
         content_modifiers = []
         info_acceptors = []
         cas_redirect_handlers = []
+        interceptors = []
         for plugin in plugins:
             if IResponseContentModifier.providedBy(plugin):
                 content_modifiers.append(plugin)
@@ -97,11 +99,34 @@ class ProxyApp(object):
                 info_acceptors.append(plugin)
             if ICASRedirectHandler.providedBy(plugin):
                 cas_redirect_handlers.append(plugin)
+            if IResourceInterceptor.providedBy(plugin):
+                interceptors.append(plugin)
         self.info_acceptors = info_acceptors
         content_modifiers.sort(key=lambda x: x.mod_sequence)
         self.content_modifiers = content_modifiers
         cas_redirect_handlers.sort(key=lambda x: x.cas_redirect_sequence)
         self.cas_redirect_handlers = cas_redirect_handlers
+        interceptors.sort(key=lambda x: x.interceptor_sequence)
+        self.interceptors = interceptors
+        
+        # Create static resources.
+        static_resources = {}
+        for plugin in plugins:
+            if IStaticResourceProvider.providedBy(plugin):
+                if plugin.static_resource_base in static_resources:
+                    if static_resources[plugin.static_resource_base] != plugin.static_resource_dir:
+                        raise Exception("Static resource conflict for '{0}': '{1}' != '{2}'".format(
+                            plugin.static_resource_base,
+                            static_resources[plugin.static_resource_base],
+                            plugin.static_resource_dir))
+                else:
+                    static_resources[plugin.static_resource_base] = plugin.static_resource_dir
+        
+        self.static_handlers = []
+        for n, (resource_base, resource_dir) in enumerate(static_resources.iteritems()):
+            handler = lambda self, request: File(resource_dir)
+            handler = self.app.route(resource_base, branch=True)(handler)
+            self.static_handlers.append(handler)
 
     def handle_port_set(self):
         """
@@ -119,6 +144,7 @@ class ProxyApp(object):
             plugin.proxied_netloc = proxied_netloc
             plugin.proxied_path = proxied_path
             plugin.handle_rproxy_info_set()
+            plugin.expire_session = self._expired
 
     def _make_agent(self, auth_files):
         """
@@ -229,6 +255,7 @@ class ProxyApp(object):
         sess = request.getSession()
         sess_uid = sess.uid
         if not sess_uid in valid_sessions:
+            log.msg("[DEBUG] session {0} not in valid sessions.  Will authenticate with CAS.".format(sess_uid))
             if request.method == 'POST':
                 headers = request.requestHeaders
                 if headers.hasHeader("Content-Type"):
@@ -261,6 +288,7 @@ class ProxyApp(object):
             d = self.redirect_to_cas_login(request)
             return d
         else:
+            log.msg("[DEBUG] session {0} is in valid sessions.".format(sess_uid))
             d = self.reverse_proxy(request)
             return d
         
@@ -435,6 +463,13 @@ class ProxyApp(object):
         #pprint.pprint(kwds)
         #print
         url = self.proxied_url + request.uri
+        
+        # Determine if a plugin wants to intercept this URL.
+        interceptors = self.interceptors
+        for interceptor in interceptors:
+            if interceptor.should_resource_be_intercepted(url, request.method, req_headers, request):
+                return interceptor.handle_resource(url, request.method, req_headers, request)
+        
         log.msg("[INFO] Proxying URL: %s" % url)
         d = treq.request(request.method, url, **kwds)
         #print "** Requesting %s %s" % (request.method, self.proxied_url + request.uri)
