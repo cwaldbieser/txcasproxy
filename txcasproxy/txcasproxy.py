@@ -3,6 +3,7 @@
 import Cookie
 import cookielib
 import datetime
+import json
 import os.path
 import pprint
 import socket
@@ -40,6 +41,7 @@ class ProxyApp(object):
     renew_name = 'renew'
     pgturl_name = 'pgtUrl'
     reactor = reactor
+    authNInfoResource = '/authn'
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True):
@@ -228,8 +230,6 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
-        """
-        """
         valid_sessions = self.valid_sessions
         sess = request.getSession()
         sess_uid = sess.uid
@@ -266,10 +266,25 @@ class ProxyApp(object):
             # Off to CAS you go!
             d = self.redirect_to_cas_login(request)
             return d
+        elif request.path == self.authNInfoResource:
+            log.msg("[DEBUG] Providing authentication info.")
+            return self.deliver_auth_info(request)
         else:
             log.msg("[DEBUG] session {0} is in valid sessions.".format(sess_uid))
             d = self.reverse_proxy(request)
             return d
+
+    def deliver_auth_info(self, request):
+        valid_sessions = self.valid_sessions
+        sess = request.getSession()    
+        sess_uid = sess.uid
+        session_info = valid_sessions[sess_uid]
+        username = session_info['username']
+        attributes = session_info['attributes']
+        doc = {'username': username, 'attributes': attributes}
+        serialized = json.dumps(doc)
+        request.responseHeaders.setRawHeaders('Content-Type', ['application/json'])
+        return serialized 
         
     def get_url(self, request):
         if self.is_https:
@@ -370,15 +385,24 @@ class ProxyApp(object):
             return request.redirect(service_url)
         user = results[0]
         username = user.text
-        
+        attributes = success.findall("{0}attributes".format(ns))
+        attrib_map = {}
+        for attrib_container in attributes:
+            for elm in attrib_container.findall('./*'):
+                tag_name = elm.tag[len(ns):]
+                value = elm.text
+                attrib_map.setdefault(tag_name, []).append(value)
         # Update session session
         valid_sessions = self.valid_sessions
         logout_tickets = self.logout_tickets
         sess = request.getSession()
         sess_uid = sess.uid
-        valid_sessions[sess_uid] = {
+        if sess_uid not in valid_sessions:
+            valid_sessions[sess_uid] = {}
+        valid_sessions[sess_uid].update({
             'username': username,
-            'ticket': ticket,}
+            'ticket': ticket,
+            'attributes': attrib_map})
         if not ticket in logout_tickets:
             logout_tickets[ticket] = sess_uid
             
@@ -388,8 +412,6 @@ class ProxyApp(object):
         return request.redirect(service_url)
         
     def _expired(self, uid):
-        """
-        """
         valid_sessions = self.valid_sessions
         if uid in valid_sessions:
             session_info = valid_sessions[uid]
@@ -433,7 +455,6 @@ class ProxyApp(object):
         for interceptor in interceptors:
             if interceptor.should_resource_be_intercepted(url, request.method, req_headers, request):
                 return interceptor.handle_resource(url, request.method, req_headers, request)
-        
         log.msg("[INFO] Proxying URL: %s" % url)
         http_client = HTTPClient(self.agent) 
         d = http_client.request(request.method, url, **kwds)
@@ -460,15 +481,15 @@ class ProxyApp(object):
             for k,v in resp_header_map.iteritems():
                 if k == 'Set-Cookie':
                     v = self.mod_cookies(v)
-                print "Browser Response >>> Setting response header: %s: %s" % (k, v)
+                print("Browser Response >>> Setting response header: %s: %s" % (k, v))
                 req_resp_headers.setRawHeaders(k, v)
             return response
             
         def show_cookies(resp):
             jar = resp.cookies()
-            print "Cookie Jar:"
+            print("Cookie Jar:")
             pprint.pprint(cookiejar)
-            print ""
+            print("")
             return resp
             
         def mod_content(body, request):
@@ -493,8 +514,6 @@ class ProxyApp(object):
         return d
     
     def mod_cookies(self, value_list):
-        """
-        """
         proxied_path = self.proxied_path
         proxied_path_size = len(proxied_path)
         results = []
@@ -531,6 +550,3 @@ class ProxyApp(object):
             self.proxied_netloc,
             self.proxied_path,
             target_url)
-
-                    
-
