@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 
-#Standard library
 import Cookie
 import cookielib
 import datetime
@@ -9,22 +8,18 @@ import pprint
 import socket
 from urllib import urlencode
 import urlparse
-
-# Application modules
 from ca_trust import CustomPolicyForHTTPS
-from interfaces import IRProxyInfoAcceptor, IResponseContentModifier, \
-                ICASRedirectHandler, IResourceInterceptor, \
-                IStaticResourceProvider
+from interfaces import (
+        IRProxyInfoAcceptor, 
+        IResponseContentModifier,
+        ICASRedirectHandler, IResourceInterceptor,
+        IStaticResourceProvider)
 import proxyutils
-
-#External modules
 from dateutil.parser import parse as parse_date
 from klein import Klein
-
 from OpenSSL import crypto
-
 import treq
-#from twisted.internet.defer import inlineCallbacks
+from treq.client import HTTPClient
 from twisted.internet import defer, reactor
 from twisted.internet.ssl import Certificate
 from twisted.python import log
@@ -35,28 +30,20 @@ from twisted.web.static import File
 from lxml import etree
 
 
-
 class ProxyApp(object):
     app = Klein()
-
     ns = "{http://www.yale.edu/tp/cas}"
     port = None
-    
     logout_instant_skew = 5
-    
     ticket_name = 'ticket'
     service_name = 'service'
     renew_name = 'renew'
     pgturl_name = 'pgtUrl'
+    reactor = reactor
     
-    def __init__(
-                self, 
-                proxied_url, 
-                cas_info, 
-                fqdn=None, 
-                authorities=None, 
-                plugins=None):
-            
+    def __init__(self, proxied_url, cas_info, 
+            fqdn=None, authorities=None, plugins=None, is_https=True):
+        self.is_https = is_https
         if proxied_url.endswith('/'):
             proxied_url = proxied_url[:-1]
         self.proxied_url = proxied_url
@@ -68,23 +55,18 @@ class ProxyApp(object):
         self.proxied_host = netloc.split(':')[0]
         self.proxied_path = p.path
         self.cas_info = cas_info
-        
         cas_param_names = set([])
         cas_param_names.add(self.ticket_name.lower())
         cas_param_names.add(self.service_name.lower())
         cas_param_names.add(self.renew_name.lower())
         cas_param_names.add(self.pgturl_name.lower())
         self.cas_param_names = cas_param_names
-        
         if fqdn is None:
             fqdn = socket.getfqdn()
         self.fqdn = fqdn
-        
         self.valid_sessions = {}
         self.logout_tickets = {}
-        
         self._make_agent(authorities)
-        
         # Sort/tag plugins
         if plugins is None:
             plugins = []
@@ -129,8 +111,6 @@ class ProxyApp(object):
             self.static_handlers.append(handler)
 
     def handle_port_set(self):
-        """
-        """
         fqdn = self.fqdn
         port = self.port
         proxied_scheme = self.proxied_scheme
@@ -147,10 +127,9 @@ class ProxyApp(object):
             plugin.expire_session = self._expired
 
     def _make_agent(self, auth_files):
-        """
-        """
+        self.connectionPool = HTTPConnectionPool(self.reactor)
         if auth_files is None or len(auth_files) == 0:
-            self.agent = None
+            self.agent = Agent(self.reactor, pool=self.connectionPool)
         else:
             extra_ca_certs = []
             for ca_cert in auth_files:
@@ -161,7 +140,7 @@ class ProxyApp(object):
                 extra_ca_certs.append(cert)
             
             policy = CustomPolicyForHTTPS(extra_ca_certs)
-            agent = Agent(reactor, contextFactory=policy)
+            agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
             self.agent = agent
 
     def mod_headers(self, h):
@@ -292,29 +271,21 @@ class ProxyApp(object):
             d = self.reverse_proxy(request)
             return d
         
-    #def clean_params(self, qs_map):
-    #    """
-    #    Remove any CAS-specific parameters from a query string map.
-    #    """
-    #    cas_param_names = self.cas_param_names
-    #    del_keys = []
-    #    for k, v in qs_map.iteritems():
-    #        if k.lower() in cas_param_names:
-    #            del_keys.append(k)
-    #    for k in del_keys:
-    #        del qs_map[k]
-        
     def get_url(self, request):
-        """
-        """
+        if self.is_https:
+            scheme = 'https'
+            default_port = 443
+        else:
+            scheme = 'http'
+            default_port = 80
         fqdn = self.fqdn
         port = self.port
         if port is None:
-            port = 443
-        if port == 443:
-            return urlparse.urljoin("https://%s" % fqdn, request.uri)
+            port = default_port
+        if port == default_port:
+            return urlparse.urljoin("%s://%s" % (scheme, fqdn), request.uri)
         else:
-            return urlparse.urljoin("https://%s:%d" % (fqdn, port), request.uri)
+            return urlparse.urljoin("%s://%s:%d" % (scheme, fqdn, port), request.uri)
         
     def redirect_to_cas_login(self, request):
         """
@@ -357,8 +328,6 @@ class ProxyApp(object):
         return d
         
     def validate_ticket(self, ticket, request):
-        """
-        """
         service_name = self.service_name
         ticket_name = self.ticket_name
         
@@ -380,17 +349,13 @@ class ProxyApp(object):
         service_validate_url = urlparse.urlunparse(p)
         
         log.msg("[INFO] requesting URL '%s' ..." % service_validate_url)
-        kwds = {}
-        kwds['agent'] = self.agent
-        
-        d = treq.get(service_validate_url, **kwds)
+        http_client = HTTPClient(self.agent) 
+        d = http_client.get(service_validate_url)
         d.addCallback(treq.content)
         d.addCallback(self.parse_sv_results, service_url, ticket, request)
         return d
         
     def parse_sv_results(self, payload, service_url, ticket, request):
-        """
-        """
         log.msg("[INFO] Parsing /serviceValidate results  ...")
         ns = self.ns
         root = etree.fromstring(payload)
@@ -446,7 +411,6 @@ class ProxyApp(object):
         kwds = {}
         #cookiejar = cookielib.CookieJar()
         cookiejar = {}
-        kwds['agent'] = self.agent
         kwds['allow_redirects'] = False
         kwds['cookies'] = cookiejar
         req_headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
@@ -471,7 +435,8 @@ class ProxyApp(object):
                 return interceptor.handle_resource(url, request.method, req_headers, request)
         
         log.msg("[INFO] Proxying URL: %s" % url)
-        d = treq.request(request.method, url, **kwds)
+        http_client = HTTPClient(self.agent) 
+        d = http_client.request(request.method, url, **kwds)
         #print "** Requesting %s %s" % (request.method, self.proxied_url + request.uri)
         def process_response(response, request):
             req_resp_headers = request.responseHeaders
@@ -547,13 +512,9 @@ class ProxyApp(object):
         return results
                      
     def is_proxy_path_or_child(self, path):
-        """
-        """
         return proxyutils.is_proxy_path_or_child(self.proxied_path, path)
     
     def proxied_url_to_proxy_url(self, proxy_scheme, target_url):
-        """
-        """
         return proxyutils.proxied_url_to_proxy_url(
             proxy_scheme,
             self.fqdn, 
@@ -563,8 +524,6 @@ class ProxyApp(object):
             target_url)
         
     def proxy_url_to_proxied_url(self, target_url):
-        """
-        """
         return proxyutils.proxy_url_to_proxied_url(
             self.proxied_scheme,
             self.fqdn, 

@@ -15,19 +15,13 @@ class ProxyService(Service):
     """
     Service 
     """
-
-    def __init__(
-            self, 
-            endpoint_s, 
-            proxied_url, 
-            cas_info, 
-            fqdn=None, 
-            authorities=None,
-            plugins=None): 
-        """
-        """
+    def __init__(self, endpoint_s, proxied_url, cas_info, 
+                    fqdn=None, authorities=None, plugins=None): 
         self.port_s = endpoint_s
-
+        if endpoint_s.startswith("ssl:"):
+            is_https = True
+        else:
+            is_https = False
         # Create the application. 
         cas_info = cas_info
         app = ProxyApp(
@@ -35,7 +29,8 @@ class ProxyService(Service):
             cas_info, 
             fqdn=fqdn, 
             authorities=authorities,
-            plugins=plugins)
+            plugins=plugins,
+            is_https=is_https)
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
@@ -50,9 +45,7 @@ class ProxyService(Service):
             d.addCallback(self.register_port)
             
     def register_port(self, lp):
-        """
-        """
         host = lp.getHost()
-        print "Setting port %d ..." % host.port
+        print("Setting port %d ..." % host.port)
         self.app.port = host.port
         self.app.handle_port_set()
