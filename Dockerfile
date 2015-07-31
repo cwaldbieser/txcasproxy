@@ -3,6 +3,7 @@ FROM debian:jessie
 RUN apt-get update && apt-get install -y \
     git \
     libxml2-dev \
+    libxslt-dev \
     python-lxml \
     python \
     build-essential \
@@ -13,7 +14,8 @@ RUN apt-get update && apt-get install -y \
     python-pip \
     openssl \
     libssl-dev \
-    python-twisted
+    python-twisted \
+    libffi-dev
 
 ADD . /txcasproxy/
     
