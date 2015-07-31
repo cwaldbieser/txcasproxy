@@ -41,7 +41,8 @@ class ProxyApp(object):
     renew_name = 'renew'
     pgturl_name = 'pgtUrl'
     reactor = reactor
-    authNInfoResource = '/authn'
+    authInfoResource = None
+    authInfoCallback = None
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True):
@@ -181,8 +182,6 @@ class ProxyApp(object):
         return h
 
     def _check_for_logout(self, request):
-        """
-        """
         data = request.content.read()
         samlp_ns = "{urn:oasis:names:tc:SAML:2.0:protocol}"
         try:
@@ -266,7 +265,7 @@ class ProxyApp(object):
             # Off to CAS you go!
             d = self.redirect_to_cas_login(request)
             return d
-        elif request.path == self.authNInfoResource:
+        elif request.path == self.authInfoResource:
             log.msg("[DEBUG] Providing authentication info.")
             return self.deliver_auth_info(request)
         else:
@@ -405,9 +404,10 @@ class ProxyApp(object):
             'attributes': attrib_map})
         if not ticket in logout_tickets:
             logout_tickets[ticket] = sess_uid
-            
+        authInfoCallback = self.authInfoCallback
+        if authInfoCallback is not None: 
+            authInfoCallback(username, attrib_map)
         sess.notifyOnExpire(lambda: self._expired(sess_uid))
-        
         # Reverse proxy.
         return request.redirect(service_url)
         
@@ -418,6 +418,9 @@ class ProxyApp(object):
             username = session_info['username']
             ticket = session_info['ticket']
             del valid_sessions[uid]
+            authInfoCallback = self.authInfoCallback
+            if authInfoCallback is not None:
+                authInfoCallback(username, None)
             logout_tickets = self.logout_tickets
             if ticket in logout_tickets:
                 del logout_tickets[ticket]

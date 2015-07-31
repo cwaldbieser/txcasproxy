@@ -1,23 +1,18 @@
 
-# Standard library.
 import sys
-
-# Application modules
 from txcasproxy import ProxyApp
-
-# External modules
+from authinfo import AuthInfoApp
 from twisted.application.service import Service
 from twisted.internet import reactor
 from twisted.internet.endpoints import serverFromString
 from twisted.web.server import Site
 
 class ProxyService(Service):
-    """
-    Service 
-    """
     def __init__(self, endpoint_s, proxied_url, cas_info, 
-                    fqdn=None, authorities=None, plugins=None): 
+                    fqdn=None, authorities=None, plugins=None,
+                    authInfoResource=None, authInfoEndpointStr=None): 
         self.port_s = endpoint_s
+        self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
             is_https = True
         else:
@@ -31,21 +26,34 @@ class ProxyService(Service):
             authorities=authorities,
             plugins=plugins,
             is_https=is_https)
+        app.authInfoResource = authInfoResource
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
+        self.listeningPorts = []
 
     def startService(self):
         if self.port_s is not None:
-            #----------------------------------------------------------------------
-            # Create endpoint from string.
-            #----------------------------------------------------------------------
             endpoint = serverFromString(reactor, self.port_s)
             d = endpoint.listen(self.site)
-            d.addCallback(self.register_port)
+            d.addCallback(self.register_port, 'app')
+        if self.authInfoEndpointStr is not None:
+            authInfoApp = AuthInfoApp()
+            self.authInfoApp = authInfoApp
+            authInfoSite = Site(authInfoApp.app.resource())
+            endpoint = serverFromString(reactor, self.authInfoEndpointStr)
+            d2 = endpoint.listen(authInfoSite)
+            d2.addCallback(self.register_port, 'authInfoSite')
             
-    def register_port(self, lp):
-        host = lp.getHost()
-        print("Setting port %d ..." % host.port)
-        self.app.port = host.port
-        self.app.handle_port_set()
+    def register_port(self, listeningPort, serviceName):
+        self.listeningPorts.append(listeningPort)
+        if serviceName == 'app':
+            host = listeningPort.getHost()
+            self.app.port = host.port
+            self.app.handle_port_set()
+        if serviceName == 'authInfoSite':
+            self.app.authInfoCallback = self.authInfoApp.setAuthInfo
+
+    def stopService(self):
+        for listeningPort in self.listeningPorts:
+            listeningPort.stopListening()

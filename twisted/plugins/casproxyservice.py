@@ -47,7 +47,11 @@ class Options(usage.Options):
                         ["proxied-url", "p", None, "The base URL to proxy."],
                         ["cas-login", "c", None, "The CAS /login URL."],
                         ["cas-service-validate", "s", None, "The CAS /serviceValidate URL."],
-                        ["fqdn", None, None, "Explicitly specify the FQDN that should be included in URL callbacks."],
+                        ["fqdn", None, None, 
+                            "Explicitly specify the FQDN that should be included in URL callbacks."],
+                        ["auth-info-endpoint", "a", None, "Endpoint for the authentication info service."],
+                        ["auth-info-resource", "A", None, 
+                            "Resource on the main site that provides authentication info."],
                         ["help-plugin", None, None, "Help or a specific plugin."],
                     ]
 
@@ -93,8 +97,10 @@ class Options(usage.Options):
                         if get_tag(plugin_str) not in self.valid_plugins]
         if len(bad_tags) > 0:
             bad_tags.sort()
-            msg = "The following plugins are not valid: %s." % (', '.join(bad_tags))
+            msg = "The following plugins are not valid: {0}.".format(
+                ', '.join(bad_tags))
             raise usage.UsageError(msg)
+
 
 class MyServiceMaker(object):
     implements(IServiceMaker, IPlugin)
@@ -103,8 +109,6 @@ class MyServiceMaker(object):
     options = Options
 
     def makeService(self, options):
-        """
-        """
         factories = [f for f in getPlugins(IRProxyPluginFactory) 
                         if hasattr(f, 'tag') and hasattr(f, 'opt_help') and hasattr(f, 'opt_usage')]
         if options['help-plugins']:
@@ -145,7 +149,8 @@ class MyServiceMaker(object):
                 for argstr in arglst:
                     plugin = factory.generatePlugin(argstr)
                     plugins.append(plugin)
-        
+        authInfoEndpointStr = options['auth-info-endpoint']
+        authInfoResource = options['auth-info-resource'] 
         # Create the service.
         return ProxyService(
             endpoint_s=options['endpoint'], 
@@ -153,11 +158,13 @@ class MyServiceMaker(object):
             cas_info=cas_info,
             fqdn=fqdn,
             authorities=options['authorities'],
-            plugins=plugins) 
+            plugins=plugins,
+            authInfoEndpointStr=authInfoEndpointStr,
+            authInfoResource=authInfoResource) 
+
 
 # Now construct an object which *provides* the relevant interfaces
 # The name of this variable is irrelevant, as long as there is *some*
 # name bound to a provider of IPlugin and IServiceMaker.
-
 serviceMaker = MyServiceMaker()
 

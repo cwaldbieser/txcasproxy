@@ -12,7 +12,7 @@ Contents:
    :maxdepth: 2
 
    intro
-   quickstart
+   options
 
 Indices and tables
 ==================
