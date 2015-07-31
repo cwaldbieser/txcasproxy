@@ -14,9 +14,10 @@ RUN apt-get update && apt-get install -y \
     openssl \
     libssl-dev \
     python-twisted
+
+ADD . /txcasproxy/
     
-RUN git clone http://github.com/cwaldbieser/txcasproxy.git && \
-    cd txcasproxy && \
+RUN cd txcasproxy && \
     pip install -r requirements.txt
 
 WORKDIR /txcasproxy
