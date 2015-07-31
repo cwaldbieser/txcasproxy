@@ -13,6 +13,7 @@ Contents:
 
    intro
    options
+   examples
 
 Indices and tables
 ==================
