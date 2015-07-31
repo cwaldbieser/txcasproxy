@@ -45,7 +45,10 @@ class ProxyApp(object):
     authInfoCallback = None
     
     def __init__(self, proxied_url, cas_info, 
-            fqdn=None, authorities=None, plugins=None, is_https=True):
+            fqdn=None, authorities=None, plugins=None, is_https=True,
+            excluded_resources=None, excluded_branches=None):
+        self.excluded_resources = excluded_resources
+        self.excluded_branches = excluded_branches
         self.is_https = is_https
         if proxied_url.endswith('/'):
             proxied_url = proxied_url[:-1]
@@ -93,7 +96,6 @@ class ProxyApp(object):
         self.cas_redirect_handlers = cas_redirect_handlers
         interceptors.sort(key=lambda x: x.interceptor_sequence)
         self.interceptors = interceptors
-        
         # Create static resources.
         static_resources = {}
         for plugin in plugins:
@@ -106,7 +108,6 @@ class ProxyApp(object):
                             plugin.static_resource_dir))
                 else:
                     static_resources[plugin.static_resource_base] = plugin.static_resource_dir
-        
         self.static_handlers = []
         for n, (resource_base, resource_dir) in enumerate(static_resources.iteritems()):
             handler = lambda self, request: File(resource_dir)
@@ -145,6 +146,15 @@ class ProxyApp(object):
             policy = CustomPolicyForHTTPS(extra_ca_certs)
             agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
             self.agent = agent
+
+    def is_excluded(self, request):
+        resource = request.path
+        if resource in self.excluded_resources:
+            return True
+        for excluded in self.excluded_branches:
+            if proxyutils.is_resource_or_child(excluded, resource):
+                return True
+        return False
 
     def mod_headers(self, h):
         keymap = {}
@@ -229,6 +239,8 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
+        if self.is_excluded(request):
+            return self.reverse_proxy(request, protected=False)
         valid_sessions = self.valid_sessions
         sess = request.getSession()
         sess_uid = sess.uid
@@ -427,11 +439,12 @@ class ProxyApp(object):
             log.msg("[INFO] label='Expired session.' session_id='%s' username='%s'" % (uid, username))
         
         
-    def reverse_proxy(self, request):
-        sess = request.getSession()
-        valid_sessions = self.valid_sessions
-        sess_uid = sess.uid
-        username = valid_sessions[sess_uid]['username']
+    def reverse_proxy(self, request, protected=True):
+        if protected:
+            sess = request.getSession()
+            valid_sessions = self.valid_sessions
+            sess_uid = sess.uid
+            username = valid_sessions[sess_uid]['username']
         # Normal reverse proxying.
         kwds = {}
         #cookiejar = cookielib.CookieJar()
@@ -440,7 +453,8 @@ class ProxyApp(object):
         kwds['cookies'] = cookiejar
         req_headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
         kwds['headers'] = req_headers
-        kwds['headers']['REMOTE_USER'] = [username]
+        if protected:
+            kwds['headers']['REMOTE_USER'] = [username]
         #print "** HEADERS **"
         #pprint.pprint(self.mod_headers(dict(request.requestHeaders.getAllRawHeaders())))
         #print

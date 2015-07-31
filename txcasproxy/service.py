@@ -10,7 +10,8 @@ from twisted.web.server import Site
 class ProxyService(Service):
     def __init__(self, endpoint_s, proxied_url, cas_info, 
                     fqdn=None, authorities=None, plugins=None,
-                    authInfoResource=None, authInfoEndpointStr=None): 
+                    authInfoResource=None, authInfoEndpointStr=None,
+                    excluded_resources=None, excluded_branches=None): 
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
@@ -25,7 +26,9 @@ class ProxyService(Service):
             fqdn=fqdn, 
             authorities=authorities,
             plugins=plugins,
-            is_https=is_https)
+            is_https=is_https,
+            excluded_resources=excluded_resources,
+            excluded_branches=excluded_branches)
         app.authInfoResource = authInfoResource
         root = app.app.resource()
         self.app = app

@@ -3,8 +3,6 @@
 import urlparse
 
 def is_proxy_path_or_child(proxied_path, path):
-    """
-    """
     if path == proxied_path:
         return True
     if path.startswith(proxied_path):
@@ -12,9 +10,9 @@ def is_proxy_path_or_child(proxied_path, path):
             return True
     return False
 
+is_resource_or_child = is_proxy_path_or_child
+
 def proxied_url_to_proxy_url(proxy_scheme, proxy_fqdn, proxy_port, proxied_netloc, proxied_path, target_url):
-    """
-    """
     p = urlparse.urlparse(target_url)
     if p.netloc == proxied_netloc:
         target_path = p.path
@@ -27,8 +25,6 @@ def proxied_url_to_proxy_url(proxy_scheme, proxy_fqdn, proxy_port, proxied_netlo
     return None
     
 def proxy_url_to_proxied_url(proxied_scheme, proxy_fqdn, proxy_port, proxied_netloc, proxied_path, target_url):
-    """
-    """
     proxy_netloc = "%s:%d" % (proxy_fqdn, proxy_port)
     p = urlparse.urlparse(target_url)
     if p.netloc == proxy_netloc:

@@ -60,6 +60,8 @@ class Options(usage.Options):
         self['authorities'] = []
         self['plugins'] = []
         self.valid_plugins = set([])
+        self['excluded-resources'] = set([])
+        self['excluded-branches'] = set([])
         for factory in getPlugins(IRProxyPluginFactory):
             if hasattr(factory, 'tag'):
                 self.valid_plugins.add(factory.tag)
@@ -75,6 +77,18 @@ class Options(usage.Options):
         Include a plugin.
         """
         self['plugins'].append(name)
+
+    def opt_exclude(self, resource):
+        """
+        Exclude a specific resource from being proxied.
+        """
+        self['excluded-resources'].add(resource)
+
+    def opt_excludeBranch(self, branch):
+        """
+        Exclude a resource and all its children from being proxied
+        """
+        self['excluded-branches'].add(branch)
 
     def postOptions(self):
         if self['help-plugins'] or self['help-plugin'] is not None:
@@ -151,6 +165,8 @@ class MyServiceMaker(object):
                     plugins.append(plugin)
         authInfoEndpointStr = options['auth-info-endpoint']
         authInfoResource = options['auth-info-resource'] 
+        excluded_resources = options['excluded-resources']
+        excluded_branches = options['excluded-branches']
         # Create the service.
         return ProxyService(
             endpoint_s=options['endpoint'], 
@@ -160,7 +176,9 @@ class MyServiceMaker(object):
             authorities=options['authorities'],
             plugins=plugins,
             authInfoEndpointStr=authInfoEndpointStr,
-            authInfoResource=authInfoResource) 
+            authInfoResource=authInfoResource,
+            excluded_resources=excluded_resources,
+            excluded_branches=excluded_branches) 
 
 
 # Now construct an object which *provides* the relevant interfaces
