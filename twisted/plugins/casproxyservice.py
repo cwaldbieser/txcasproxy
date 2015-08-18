@@ -47,6 +47,7 @@ class Options(usage.Options):
                         ["proxied-url", "p", None, "The base URL to proxy."],
                         ["cas-login", "c", None, "The CAS /login URL."],
                         ["cas-service-validate", "s", None, "The CAS /serviceValidate URL."],
+                        ["header", "H", "REMOTE_USER", "The name of the header in which to pass the authenticated user ID."],
                         ["fqdn", None, None, 
                             "Explicitly specify the FQDN that should be included in URL callbacks."],
                         ["auth-info-endpoint", "a", None, "Endpoint for the authentication info service."],
@@ -128,7 +129,6 @@ class MyServiceMaker(object):
         if options['help-plugins']:
             format_plugin_help_list(factories, sys.stderr)
             sys.exit(0)
-            
         help_plugin = options.get('help-plugin', None)
         if help_plugin is not None:
             for factory in factories:
@@ -138,13 +138,10 @@ class MyServiceMaker(object):
                     sys.exit(0)
             sys.stderr.write("No such plugin, '{0}'.\n".format(help_plugin))
             sys.exit(0)
-                    
-            
         cas_info = dict(
             login_url=options['cas-login'],
             service_validate_url=options['cas-service-validate'])
         fqdn = options.get('fqdn', None)
-        
         # Load plugins.
         plugin_opts = {}
         for plugin_arg in options['plugins']:
@@ -178,7 +175,8 @@ class MyServiceMaker(object):
             authInfoEndpointStr=authInfoEndpointStr,
             authInfoResource=authInfoResource,
             excluded_resources=excluded_resources,
-            excluded_branches=excluded_branches) 
+            excluded_branches=excluded_branches,
+            remote_user_header=options['header']) 
 
 
 # Now construct an object which *provides* the relevant interfaces

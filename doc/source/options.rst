@@ -11,6 +11,8 @@ Options
       -p, --proxied-url=           The base URL to proxy.
       -c, --cas-login=             The CAS /login URL.
       -s, --cas-service-validate=  The CAS /serviceValidate URL.
+      -H, --header=                The name of the header in which to pass the
+                                   authenticated user ID. [default: REMOTE_USER]
           --fqdn=                  Explicitly specify the FQDN that should be
                                    included in URL callbacks.
       -a, --auth-info-endpoint=    Endpoint for the authentication info service.
@@ -28,6 +30,19 @@ Endpoint Specifications
 
 Endpoints are string descriptions of a socket connection a client or
 server makes.  For more details, see the `Twisted endpoints documentation`_.
+
+----------------------
+The REMOTE_USER Header
+----------------------
+The reverse proxy attempts to transmit the authenticated user name to the proxied
+web site as the HTTP header, 'REMOTE_USER'.  Some web servers will modify or
+reject certain headers.  
+
+For example, Apache2 will discard 'REMOTE_USER'.  It will convert 'Remote-User' 
+into 'HTTP_REMOTE_USER' by the time it reaches the proxied site.
+
+The :option:`--header` option lets you specify the name of the header to pass on
+to the proxied site.
 
 ----------------------------------
 Authentication Information Service

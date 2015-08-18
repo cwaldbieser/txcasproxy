@@ -43,10 +43,13 @@ class ProxyApp(object):
     reactor = reactor
     authInfoResource = None
     authInfoCallback = None
+    remoteUserHeader = 'Remote-User'
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
-            excluded_resources=None, excluded_branches=None):
+            excluded_resources=None, excluded_branches=None, remote_user_header=None):
+        if remote_user_header is not None:
+            self.remoteUserHeader = remote_user_header
         self.excluded_resources = excluded_resources
         self.excluded_branches = excluded_branches
         self.is_https = is_https
@@ -447,26 +450,16 @@ class ProxyApp(object):
             username = valid_sessions[sess_uid]['username']
         # Normal reverse proxying.
         kwds = {}
-        #cookiejar = cookielib.CookieJar()
         cookiejar = {}
         kwds['allow_redirects'] = False
         kwds['cookies'] = cookiejar
         req_headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
         kwds['headers'] = req_headers
         if protected:
-            kwds['headers']['REMOTE_USER'] = [username]
-        #print "** HEADERS **"
-        #pprint.pprint(self.mod_headers(dict(request.requestHeaders.getAllRawHeaders())))
-        #print
+            kwds['headers'][self.remoteUserHeader] = [username]
         if request.method in ('PUT', 'POST'):
             kwds['data'] = request.content.read()
-        #print "request.method", request.method
-        #print "url", self.proxied_url + request.uri
-        #print "kwds:"
-        #pprint.pprint(kwds)
-        #print
         url = self.proxied_url + request.uri
-        
         # Determine if a plugin wants to intercept this URL.
         interceptors = self.interceptors
         for interceptor in interceptors:
@@ -475,7 +468,6 @@ class ProxyApp(object):
         log.msg("[INFO] Proxying URL: %s" % url)
         http_client = HTTPClient(self.agent) 
         d = http_client.request(request.method, url, **kwds)
-        #print "** Requesting %s %s" % (request.method, self.proxied_url + request.uri)
         def process_response(response, request):
             req_resp_headers = request.responseHeaders
             resp_code = response.code

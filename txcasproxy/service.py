@@ -11,7 +11,8 @@ class ProxyService(Service):
     def __init__(self, endpoint_s, proxied_url, cas_info, 
                     fqdn=None, authorities=None, plugins=None,
                     authInfoResource=None, authInfoEndpointStr=None,
-                    excluded_resources=None, excluded_branches=None): 
+                    excluded_resources=None, excluded_branches=None,
+                    remote_user_header=None): 
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
@@ -28,7 +29,8 @@ class ProxyService(Service):
             plugins=plugins,
             is_https=is_https,
             excluded_resources=excluded_resources,
-            excluded_branches=excluded_branches)
+            excluded_branches=excluded_branches,
+            remote_user_header=remote_user_header)
         app.authInfoResource = authInfoResource
         root = app.app.resource()
         self.app = app
