@@ -57,7 +57,7 @@ a JSON document that maps attribute names to lists of values.
 .. NOTE::
 
     Even attributes that are single-valued have their values expressed as
-    a list with a sigle element.
+    a list with a single element.
 
 The intention is that access to this site should be limited to the protected 
 service (e.g. with a host based firewall).  The protected service can then
