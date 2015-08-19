@@ -28,6 +28,7 @@ Example command line:
         -c 'https://cas.example.net/login' \
         -s 'https://cas.example.net/serviceValidate' \
         -p 'http://protected.example.org/' \
-        -a 'tcp:9444'
+        -a 'tcp:9444' \
+        -H 'Remote-User'
 
 
