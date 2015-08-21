@@ -340,44 +340,39 @@ class ProxyApp(object):
         """
         cas_info = self.cas_info
         login_url = cas_info['login_url']
-                
         p = urlparse.urlparse(login_url)
         params = {self.service_name: service_url}
-    
         if p.query == '':
             param_str = urlencode(params)
         else:
             qs_map = urlparse.parse_qs(p.query)
             qs_map.update(params)
-            param_str = urlencode(qs_map)
+            param_str = urlencode(qs_map, doseq=True)
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
-        
         url = urlparse.urlunparse(p)
+        log.msg("[DEBUG] Redirecting to CAS with URL '{0}'.".format(url))
         d = request.redirect(url)
         return d
         
     def validate_ticket(self, ticket, request):
         service_name = self.service_name
         ticket_name = self.ticket_name
-        
         this_url = self.get_url(request)
         p = urlparse.urlparse(this_url)
         qs_map = urlparse.parse_qs(p.query)
         if ticket_name in qs_map:
             del qs_map[ticket_name]
-        param_str = urlencode(qs_map)
+        param_str = urlencode(qs_map, doseq=True)
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         service_url = urlparse.urlunparse(p)
-        
         params = {
                 service_name: service_url,
                 ticket_name: ticket,}
-        param_str = urlencode(params)
+        param_str = urlencode(params, doseq=True)
         p = urlparse.urlparse(self.cas_info['service_validate_url'])
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         service_validate_url = urlparse.urlunparse(p)
-        
-        log.msg("[INFO] requesting URL '%s' ..." % service_validate_url)
+        log.msg("[INFO] requesting service-validate URL '%s' ..." % service_validate_url)
         http_client = HTTPClient(self.agent) 
         d = http_client.get(service_validate_url)
         d.addCallback(treq.content)
