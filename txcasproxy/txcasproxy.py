@@ -16,6 +16,7 @@ from interfaces import (
         ICASRedirectHandler, IResourceInterceptor,
         IStaticResourceProvider)
 import proxyutils
+from .urls import does_url_match_pattern, parse_url_pattern
 from dateutil.parser import parse as parse_date
 from klein import Klein
 from OpenSSL import crypto
@@ -44,10 +45,14 @@ class ProxyApp(object):
     authInfoResource = None
     authInfoCallback = None
     remoteUserHeader = 'Remote-User'
+    logoutPattern = None
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
-            excluded_resources=None, excluded_branches=None, remote_user_header=None):
+            excluded_resources=None, excluded_branches=None,
+            remote_user_header=None, logoutPattern=None):
+        self.logoutPattern = parse_url_pattern(logoutPattern)
+        assert self.logoutPattern.scheme == '', 'Logout pattern must be a relative URL.'
         if remote_user_header is not None:
             self.remoteUserHeader = remote_user_header
         self.excluded_resources = excluded_resources
@@ -123,7 +128,6 @@ class ProxyApp(object):
         proxied_scheme = self.proxied_scheme
         proxied_netloc = self.proxied_netloc
         proxied_path = self.proxied_path
-        
         for plugin in self.info_acceptors:
             plugin.proxy_fqdn = fqdn
             plugin.proxy_port = port
@@ -145,7 +149,6 @@ class ProxyApp(object):
                 cert = crypto.load_certificate(crypto.FILETYPE_PEM, data)
                 del data
                 extra_ca_certs.append(cert)
-            
             policy = CustomPolicyForHTTPS(extra_ca_certs)
             agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
             self.agent = agent
@@ -167,7 +170,6 @@ class ProxyApp(object):
                 keymap[key].append(k)
             else:
                 keymap[key] = [k]
-                
         if 'host' in keymap:
             for k in keymap['host']:
                 h[k] = [self.proxied_netloc]
@@ -177,7 +179,6 @@ class ProxyApp(object):
         if 'content-length' in keymap:
             for k in keymap['content-length']:
                 del h[k]
-                
         if 'referer' in keymap:
             for k in keymap['referer']:
                 del h[k]
@@ -237,11 +238,19 @@ class ProxyApp(object):
             log.msg("[DEBUG] Could not parse XML.")
         else:
             log.msg("[DEBUG] root.tag == '%s'" % root.tag)
-            
         return False
 
     @app.route("/", branch=True)
     def proxy(self, request):
+        if does_url_match_pattern(request.uri, self.logoutPattern):
+            sess = request.getSession()
+            sess_uid = sess.uid
+            self._expired(sess_uid)
+            cas_logout = self.cas_info.get('logout_url', None)
+            if cas_logout is not None:
+                return request.redirect(cas_logout)
+            else:
+                return self.reverse_proxy(request, protected=False)
         if self.is_excluded(request):
             return self.reverse_proxy(request, protected=False)
         valid_sessions = self.valid_sessions
@@ -435,7 +444,6 @@ class ProxyApp(object):
             if ticket in logout_tickets:
                 del logout_tickets[ticket]
             log.msg("[INFO] label='Expired session.' session_id='%s' username='%s'" % (uid, username))
-        
         
     def reverse_proxy(self, request, protected=True):
         if protected:

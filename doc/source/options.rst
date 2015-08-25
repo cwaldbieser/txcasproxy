@@ -11,6 +11,10 @@ Options
       -p, --proxied-url=           The base URL to proxy.
       -c, --cas-login=             The CAS /login URL.
       -s, --cas-service-validate=  The CAS /serviceValidate URL.
+      -L, --logout=                Resource pattern that terminates the proxy
+                                   session.
+      -l, --cas-logout=            The CAS /logout URL.  Requires `logout` option to
+                                   be set.
       -H, --header=                The name of the header in which to pass the
                                    authenticated user ID. [default: REMOTE_USER]
           --fqdn=                  Explicitly specify the FQDN that should be
@@ -43,6 +47,23 @@ into 'HTTP_REMOTE_USER' by the time it reaches the proxied site.
 
 The :option:`--header` option lets you specify the name of the header to pass on
 to the proxied site.
+
+------------------
+Ending the Session
+------------------
+
+The :option:`logout` option allows you to specify a URL pattern that will be
+intercepted by the proxy and cause it to terminate its authenticated session.
+
+If the :option:`cas-logout` URL option is also specified, an HTTP redirect is 
+issued to that URL to terminate the SSO session.
+
+If the :option:`cas-logout` option is not specified, the proxy will reverse 
+proxy the resource (it is not protected).  This can be useful if your application
+allows you to specify a logout URL which you can point to the CAS logout URL.
+This allows the application to perform its own session termination before the
+SSO session is ended.  It is also useful if the service does not participate in
+an SSO session but simply uses a CAS service to authenticate.
 
 ----------------------------------
 Authentication Information Service

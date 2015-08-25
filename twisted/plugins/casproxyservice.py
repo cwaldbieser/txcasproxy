@@ -1,11 +1,10 @@
 
 # Standard library
+from __future__ import print_function
 import sys
-
 # Application modules
 from txcasproxy.interfaces import IRProxyPluginFactory
 from txcasproxy.service import ProxyService
-
 # External modules
 from twisted.application.service import IServiceMaker
 from twisted.plugin import getPlugins, IPlugin
@@ -47,6 +46,8 @@ class Options(usage.Options):
                         ["proxied-url", "p", None, "The base URL to proxy."],
                         ["cas-login", "c", None, "The CAS /login URL."],
                         ["cas-service-validate", "s", None, "The CAS /serviceValidate URL."],
+                        ["logout", "L", None, "Resource pattern that terminates the proxy session."],
+                        ["cas-logout", "l", None, "The CAS /logout URL.  Requires `logout` option to be set."],
                         ["header", "H", "REMOTE_USER", "The name of the header in which to pass the authenticated user ID."],
                         ["fqdn", None, None, 
                             "Explicitly specify the FQDN that should be included in URL callbacks."],
@@ -140,7 +141,8 @@ class MyServiceMaker(object):
             sys.exit(0)
         cas_info = dict(
             login_url=options['cas-login'],
-            service_validate_url=options['cas-service-validate'])
+            service_validate_url=options['cas-service-validate'],
+            logout_url=options['cas-logout'])
         fqdn = options.get('fqdn', None)
         # Load plugins.
         plugin_opts = {}
@@ -164,6 +166,11 @@ class MyServiceMaker(object):
         authInfoResource = options['auth-info-resource'] 
         excluded_resources = options['excluded-resources']
         excluded_branches = options['excluded-branches']
+        logout = options['logout']
+        cas_logout = options['cas-logout']
+        if cas_logout is not None and logout is None:
+            print("Option `logout` required for option `cas-logout`.", file=sys.stderr)
+            sys.exit(1)
         # Create the service.
         return ProxyService(
             endpoint_s=options['endpoint'], 
@@ -176,7 +183,8 @@ class MyServiceMaker(object):
             authInfoResource=authInfoResource,
             excluded_resources=excluded_resources,
             excluded_branches=excluded_branches,
-            remote_user_header=options['header']) 
+            remote_user_header=options['header'],
+            logoutPattern=logout)
 
 
 # Now construct an object which *provides* the relevant interfaces

@@ -39,4 +39,3 @@ def proxy_url_to_proxied_url(proxied_scheme, proxy_fqdn, proxy_port, proxied_net
         new_target_url = urlparse.urlunparse(p)
         return new_target_url
     return None
-        
