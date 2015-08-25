@@ -52,7 +52,7 @@ class ProxyApp(object):
             excluded_resources=None, excluded_branches=None,
             remote_user_header=None, logoutPattern=None):
         self.logoutPattern = parse_url_pattern(logoutPattern)
-        assert self.logoutPattern.scheme == '', 'Logout pattern must be a relative URL.'
+        assert self.logoutPattern is None or self.logoutPattern.scheme == '', 'Logout pattern must be a relative URL.'
         if remote_user_header is not None:
             self.remoteUserHeader = remote_user_header
         self.excluded_resources = excluded_resources
