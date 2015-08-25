@@ -48,8 +48,8 @@ def does_url_match_pattern(url, parsed_pattern):
         return False
     if p.query != '':
         if parsed_pattern.query != '*':
-            qs0 = set(urlparse.parse_qsl(p.query))
-            qs1 = set(urlparse.parse_qsl(parsed_pattern.query))
+            qs0 = set(urlparse.parse_qsl(p.query, True))
+            qs1 = set(urlparse.parse_qsl(parsed_pattern.query, True))
             if qs0 != qs1:
                 return False
     return True
