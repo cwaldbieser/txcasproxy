@@ -55,6 +55,19 @@ Ending the Session
 The :option:`logout` option allows you to specify a URL pattern that will be
 intercepted by the proxy and cause it to terminate its authenticated session.
 
+The logout pattern may be a regular URL less the scheme and netlocation.  
+Additionally, the path may include globbing meta-characters.
+
+A query string does not need to be supplied in the pattern.  In this case, 
+*any* query string will match the pattern.  This is also the case if the 
+entire query string for the pattern is '*'.  If the pattern query string 
+is '!', then a URL will *only* match if it has no query string (or an 
+empty query string).
+
+If the pattern contains query string parameters, then a URL will *only* match
+if it contains *all* the query parameters and values specified in the pattern.
+A URL *may* contain addtional query string parameters and still match.
+
 If the :option:`cas-logout` URL option is also specified, an HTTP redirect is 
 issued to that URL to terminate the SSO session.
 

@@ -46,7 +46,9 @@ def does_url_match_pattern(url, parsed_pattern):
         return False
     if not fnmatch(p.path, parsed_pattern.path):
         return False
-    if parsed_pattern.query not in ('', '*'):
+    if parsed_pattern.query == '!' and p.query != '':
+        return False
+    elif parsed_pattern.query not in ('', '*'):
         qs0 = set(urlparse.parse_qsl(p.query, True))
         qs1 = set(urlparse.parse_qsl(parsed_pattern.query, True))
         if not qs0.issuperset(qs1):
@@ -109,6 +111,16 @@ if __name__ == "__main__":
         (
             'https://different.example.org/authenticate?domain=baz&logout', 
             'https://different.example.org/authenticate?logout=true',
+            False
+        ),
+        (
+            'https://different.example.org/authenticate?logout', 
+            'https://different.example.org/authenticate?!',
+            False
+        ),
+        (
+            'https://same.example.org/authenticate', 
+            'https://same.example.org/authenticate?!',
             False
         ),
     ]         
