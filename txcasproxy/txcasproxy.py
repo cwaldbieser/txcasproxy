@@ -391,7 +391,10 @@ class ProxyApp(object):
     def parse_sv_results(self, payload, service_url, ticket, request):
         log.msg("[INFO] Parsing /serviceValidate results  ...")
         ns = self.ns
-        root = etree.fromstring(payload)
+        try:
+            root = etree.fromstring(payload)
+        except (etree.XMLSyntaxError,) as ex:
+            return request.redirect(service_url)
         if root.tag != ('%sserviceResponse' % ns):
             return request.redirect(service_url)
         results = root.findall("%sauthenticationSuccess" % ns)
