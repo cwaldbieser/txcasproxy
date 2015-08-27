@@ -46,51 +46,77 @@ def does_url_match_pattern(url, parsed_pattern):
         return False
     if not fnmatch(p.path, parsed_pattern.path):
         return False
-    if p.query != '':
-        if parsed_pattern.query != '*':
-            qs0 = set(urlparse.parse_qsl(p.query, True))
-            qs1 = set(urlparse.parse_qsl(parsed_pattern.query, True))
-            if qs0 != qs1:
-                return False
+    if parsed_pattern.query not in ('', '*'):
+        qs0 = set(urlparse.parse_qsl(p.query, True))
+        qs1 = set(urlparse.parse_qsl(parsed_pattern.query, True))
+        if not qs0.issuperset(qs1):
+            return False
     return True
 
 if __name__ == "__main__":
     urls = [
-        ('http://same.example.com/', 'http://same.example.com/'),
-        ('http://different.example.com/', 'http://notthesame.example.net'),
-        ('http://differentscheme.example.org/', 'https://differentscheme.example.org/'),
-        ('http://sameport.example.net/', 'http://sameport.example.net:80/'),
-        ('https://sameport.example.net/', 'https://sameport.example.net:443/'),
-        ('http://differentport.example.net/', 'http://differentport.example.net:8080/'),
-        ('http://differentpath.example.org/baz', 'http://differentpath.example.org/baz/'),
+        ('http://same.example.com/', 'http://same.example.com/', True),
+        ('http://different.example.com/', 'http://notthesame.example.net', False),
+        ('http://differentscheme.example.org/', 'https://differentscheme.example.org/', False),
+        ('http://sameport.example.net/', 'http://sameport.example.net:80/', True),
+        ('https://sameport.example.net/', 'https://sameport.example.net:443/', True),
+        ('http://differentport.example.net/', 'http://differentport.example.net:8080/', False),
+        ('http://differentpath.example.org/baz', 'http://differentpath.example.org/baz/', False),
         (
             'http://differentquery.example.org/baz/?uno=1&dos=2', 
-            'http://differentquery.example.org/baz/?uno=one&dos=two'
+            'http://differentquery.example.org/baz/?uno=one&dos=two',
+            False
         ),
         (
             'http://samequery.example.org/baz/?quarter=25&nickle=5&penny=1', 
             'http://samequery.example.org/baz/?quarter=25&nickle=5&penny=1', 
+            True,
         ),
         (
             'http://samequery.example.org/baz/?nickle=5&quarter=25&penny=1', 
-            'http://samequery.example.org/baz/?quarter=25&nickle=5&penny=1', 
+            'http://samequery.example.org/baz/?quarter=25&nickle=5&penny=1',
+            True,
         ),
-        ('http://same.example.com/', '//same.example.com/'),
-        ('http://same.example.com/', '//*/'),
-        ('http://different.example.com/', '//notthesame.example.net'),
-        ('http://differentscheme.example.org/', 'https://*/'),
-        ('http://sameport.example.net/', 'http://*:80/'),
-        ('https://sameport.example.net/', 'https://*:443/'),
-        ('http://differentport.example.net/', '//*:8080/'),
-        ('http://samepath.example.org/baz/bar/bang', 'http://differentpath.example.org/baz/*'),
+        ('http://same.example.com/', '//same.example.com/', True),
+        ('http://same.example.com/', '//*/', True),
+        ('http://different.example.com/', '//notthesame.example.net', False),
+        ('http://differentscheme.example.org/', 'https://*/', False),
+        ('http://sameport.example.net/', 'http://*:80/', True),
+        ('https://sameport.example.net/', 'https://*:443/', True),
+        ('http://differentport.example.net/', '//*:8080/', False),
+        ('http://samepath.example.org/baz/bar/bang', 'http://samepath.example.org/baz/*', True),
         (
             'http://samequery.example.org/baz/?quarter=25&nickle=5&penny=1', 
-            'http://samequery.example.org/baz/?*', 
+            'http://samequery.example.org/baz/?*',
+            True,
         ),
-        ('/logout', '/logout'),
+        ('/logout', '/logout', True),
+        (
+            'https://different.example.org/authenticate', 
+            'https://different.example.org/authenticate?domain=baz&logout',
+            False,
+        ),
+        (
+            'https://same.example.org/authenticate?domain=baz&logout', 
+            'https://same.example.org/authenticate',
+            True,
+        ),
+        (
+            'https://same.example.org/authenticate?domain=baz&logout', 
+            'https://same.example.org/authenticate?logout',
+            True,
+        ),
+        (
+            'https://different.example.org/authenticate?domain=baz&logout', 
+            'https://different.example.org/authenticate?logout=true',
+            False
+        ),
     ]         
-    for url, pattern in urls:
+    for url, pattern, expected in urls:
         print("URL => {0}".format(url))
         print("Pattern => {0}".format(pattern))
-        print("Match? => {0}".format(does_url_match_pattern(url, parse_url_pattern(pattern))))
+        matches = does_url_match_pattern(url, parse_url_pattern(pattern))
+        print("Match? => {0}".format(matches))
+        if matches != expected:
+            print("*** ERROR !!! => Expected result was {0} but got {1}!".format(expected, matches))
         print("") 
