@@ -7,6 +7,7 @@ Options
     Usage: twistd [options] casproxy [options]
     Options:
           --help-plugins           Help about available plugins.
+      -d, --debug                  Errors served as HTML.
       -e, --endpoint=              An endpoint connection string.
       -p, --proxied-url=           The base URL to proxy.
       -c, --cas-login=             The CAS /login URL.
@@ -21,6 +22,9 @@ Options
       -A, --auth-info-resource=    Resource on the main site that provides
                                    authentication info.
           --help-plugin=           Help or a specific plugin.
+      -t, --template-dir=          Folder containing templates.
+      -T, --template-resource=     Base resource for templates. [default:
+                                   /_templates]
           --help                   Display this help and exit.
           --plugin=                Include a plugin.
           --version                Display Twisted version and exit.
@@ -116,4 +120,34 @@ authenticated session.  It is therefore more convenient for a client which
 has authenticated with the proxy to access than for code from the protected
 service.
 
+--------------
+Error Handling
+--------------
+
+The :option:`debug` option causes any *unexpected* errors (i.e. bugs) to be output to HTML.
+
+There are two expected error scenarios when the proxy may be required to display its own content.
+If a browser presents a URL to the proxy which contains a CAS service ticket that fails validation,
+the proxy will emit a 403 (Forbidden) HTTP response code.  By default, no content is included.
+
+The second case is when something external to the proxy has gone wrong (perhaps the CAS service
+is unavailable).  In this case, a HTTP 500 response code is returned by the proxy.  Again, there
+is no content by default.
+
+You can provide custom error pages by specifying the :option:`template_dir` option.  This should
+be the path to a folder that contains subfolders :file:`static` and :file:`error`.  The 
+:file:`error` folder should contain templates :file:`403.jinja2` and :file:`500.jinja2`, which
+should be `Jinja2 templates`_.  These templates can access the HTTP request object as the name 
+`request`.  The :file:`static` folder may contain any static assets required for rendering the
+final HTML pages (e.g. images, stylesheets, scripts).  These will be served from 
+`/_templates/static` by default.  You can change the root resource with the 
+:option:`template-resource` option.
+
+.. note::
+
+    Only the top-level resource can be changed.  For example, if you change the resource to
+    `/foo`, the content will be served from `/foo/static/`.
+
+
 .. _Twisted endpoints documentation: https://twistedmatrix.com/documents/current/core/howto/endpoints.html
+.. _Jinja2 templates: http://jinja.pocoo.org/
