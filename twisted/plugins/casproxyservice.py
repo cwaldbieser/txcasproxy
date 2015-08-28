@@ -46,7 +46,6 @@ class Options(usage.Options):
                         ["proxied-url", "p", None, "The base URL to proxy."],
                         ["cas-login", "c", None, "The CAS /login URL."],
                         ["cas-service-validate", "s", None, "The CAS /serviceValidate URL."],
-                        ["logout", "L", None, "Resource pattern that terminates the proxy session."],
                         ["cas-logout", "l", None, "The CAS /logout URL.  Requires `logout` option to be set."],
                         ["header", "H", "REMOTE_USER", "The name of the header in which to pass the authenticated user ID."],
                         ["fqdn", None, None, 
@@ -60,6 +59,7 @@ class Options(usage.Options):
     def __init__(self):
         usage.Options.__init__(self)
         self['authorities'] = []
+        self['logouts'] = []
         self['plugins'] = []
         self.valid_plugins = set([])
         self['excluded-resources'] = set([])
@@ -74,6 +74,14 @@ class Options(usage.Options):
         """
         self['authorities'].append(pem_path)
         
+    def opt_logout(self, logout_pattern):
+        """
+        Add a logout resource pattern to intercept and terminate the proxy session.
+        """
+        self['logouts'].append(logout_pattern)
+
+    opt_L = opt_logout
+
     def opt_plugin(self, name):
         """
         Include a plugin.
@@ -166,9 +174,9 @@ class MyServiceMaker(object):
         authInfoResource = options['auth-info-resource'] 
         excluded_resources = options['excluded-resources']
         excluded_branches = options['excluded-branches']
-        logout = options['logout']
+        logouts = options['logouts']
         cas_logout = options['cas-logout']
-        if cas_logout is not None and logout is None:
+        if cas_logout is not None and len(logouts) == 0:
             print("Option `logout` required for option `cas-logout`.", file=sys.stderr)
             sys.exit(1)
         # Create the service.
@@ -184,7 +192,7 @@ class MyServiceMaker(object):
             excluded_resources=excluded_resources,
             excluded_branches=excluded_branches,
             remote_user_header=options['header'],
-            logoutPattern=logout)
+            logoutPatterns=logouts)
 
 
 # Now construct an object which *provides* the relevant interfaces

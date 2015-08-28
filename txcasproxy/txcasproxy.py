@@ -45,14 +45,17 @@ class ProxyApp(object):
     authInfoResource = None
     authInfoCallback = None
     remoteUserHeader = 'Remote-User'
-    logoutPattern = None
+    logoutPatterns = None
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
             excluded_resources=None, excluded_branches=None,
-            remote_user_header=None, logoutPattern=None):
-        self.logoutPattern = parse_url_pattern(logoutPattern)
-        assert self.logoutPattern is None or self.logoutPattern.scheme == '', 'Logout pattern must be a relative URL.'
+            remote_user_header=None, logoutPatterns=None):
+        if logoutPatterns is not None:
+            self.logoutPatterns = [parse_url_pattern(pattern) for pattern in logoutPatterns]
+        for pattern in self.logoutPatterns:
+            assert pattern is None or pattern.scheme == '', (
+                "Logout pattern '{0}' must be a relative URL.".format(pattern))
         if remote_user_header is not None:
             self.remoteUserHeader = remote_user_header
         self.excluded_resources = excluded_resources
@@ -242,15 +245,16 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
-        if does_url_match_pattern(request.uri, self.logoutPattern):
-            sess = request.getSession()
-            sess_uid = sess.uid
-            self._expired(sess_uid)
-            cas_logout = self.cas_info.get('logout_url', None)
-            if cas_logout is not None:
-                return request.redirect(cas_logout)
-            else:
-                return self.reverse_proxy(request, protected=False)
+        for pattern in self.logoutPatterns:
+            if does_url_match_pattern(request.uri, pattern):
+                sess = request.getSession()
+                sess_uid = sess.uid
+                self._expired(sess_uid)
+                cas_logout = self.cas_info.get('logout_url', None)
+                if cas_logout is not None:
+                    return request.redirect(cas_logout)
+                else:
+                    return self.reverse_proxy(request, protected=False)
         if self.is_excluded(request):
             return self.reverse_proxy(request, protected=False)
         valid_sessions = self.valid_sessions

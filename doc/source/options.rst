@@ -11,8 +11,6 @@ Options
       -p, --proxied-url=           The base URL to proxy.
       -c, --cas-login=             The CAS /login URL.
       -s, --cas-service-validate=  The CAS /serviceValidate URL.
-      -L, --logout=                Resource pattern that terminates the proxy
-                                   session.
       -l, --cas-logout=            The CAS /logout URL.  Requires `logout` option to
                                    be set.
       -H, --header=                The name of the header in which to pass the
@@ -23,10 +21,15 @@ Options
       -A, --auth-info-resource=    Resource on the main site that provides
                                    authentication info.
           --help-plugin=           Help or a specific plugin.
-          --version                Display Twisted version and exit.
-          --addCA=                 Add a trusted CA public cert (PEM format).
           --help                   Display this help and exit.
           --plugin=                Include a plugin.
+          --version                Display Twisted version and exit.
+          --addCA=                 Add a trusted CA public cert (PEM format).
+          --exclude=               Exclude a specific resource from being proxied.
+      -L, --logout=                Add a logout resource pattern to intercept and
+                                   terminate the proxy session.
+          --excludeBranch=         Exclude a resource and all its children from
+                                   being proxied
 
 -----------------------
 Endpoint Specifications
@@ -54,6 +57,7 @@ Ending the Session
 
 The :option:`logout` option allows you to specify a URL pattern that will be
 intercepted by the proxy and cause it to terminate its authenticated session.
+This option may be specified multiple times.
 
 The logout pattern may be a regular URL less the scheme and netlocation.  
 Additionally, the path may include globbing meta-characters.

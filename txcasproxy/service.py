@@ -12,7 +12,7 @@ class ProxyService(Service):
                     fqdn=None, authorities=None, plugins=None,
                     authInfoResource=None, authInfoEndpointStr=None,
                     excluded_resources=None, excluded_branches=None,
-                    remote_user_header=None, logoutPattern=None): 
+                    remote_user_header=None, logoutPatterns=None): 
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
@@ -31,7 +31,7 @@ class ProxyService(Service):
             excluded_resources=excluded_resources,
             excluded_branches=excluded_branches,
             remote_user_header=remote_user_header,
-            logoutPattern=logoutPattern)
+            logoutPatterns=logoutPatterns)
         app.authInfoResource = authInfoResource
         root = app.app.resource()
         self.app = app
