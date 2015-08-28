@@ -7,6 +7,7 @@ import json
 import os.path
 import pprint
 import socket
+import sys
 from urllib import urlencode
 import urlparse
 from ca_trust import CustomPolicyForHTTPS
@@ -30,6 +31,7 @@ from twisted.python import log
 import twisted.web.client as twclient
 from twisted.web.client import BrowserLikePolicyForHTTPS, Agent
 from twisted.web.client import HTTPConnectionPool
+from twisted.web.resource import Resource
 from twisted.web.static import File
 from lxml import etree
 
@@ -57,9 +59,14 @@ class ProxyApp(object):
         self.template_dir = template_dir
         if template_dir is not None:
             self.template_loader_ = FileSystemLoader(template_dir)
+            self.template_env_ = Environment()
+            self.templateStaticResource_ = self.create_template_static_resource()
         if template_resource is not None:
             if not template_resource.endswith('/'):
                 template_resource = "{0}/".format(template_resource)
+        if template_resource is not None and template_dir is not None:
+            static_resource = "{0}static/".format(template_resource)
+            self.static = self.app.route(static_resource, branch=True)(self.__class__.static)
         self.template_resource = template_resource
         if logoutPatterns is not None:
             self.logoutPatterns = [parse_url_pattern(pattern) for pattern in logoutPatterns]
@@ -255,9 +262,9 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
-        if self.template_dir is not None:
-            if request.path.startswith(self.get_template_static_base()):
-                return self.render_template_static(request)
+        #if self.template_dir is not None:
+        #    if request.path.startswith(self.get_template_static_base()):
+        #        return  self.templateStaticResource_
         for pattern in self.logoutPatterns:
             if does_url_match_pattern(request.uri, pattern):
                 sess = request.getSession()
@@ -605,32 +612,42 @@ class ProxyApp(object):
         else:
             return '{0}static/'.format(self.template_resource)
 
-    def render_template_403(self, env=None):
-        return self.render_template('error/403.jinja2', env)
-
-    def render_template_500(self, env=None):
-        return self.render_template('error/500.jinja2', env)
-
-    def render_template(self, template_name, env=None):
-        if env is None:
-            env = {}
+    def render_template_403(self, **kwargs):
         template_dir = self.template_dir
         if template_dir is None:
             request.setResponseCode(403)
             return ""
         else:
-            template_name = 'error/403.jinja2'
+            return self.render_template('error/403.jinja2', **kwargs)
+
+    def render_template_404(self, **kwargs):
+        template_dir = self.template_dir
+        if template_dir is None:
+            request.setResponseCode(404)
+            return ""
+        else:
+            return self.render_template('error/404.jinja2', **kwargs)
+
+    def render_template_500(self, **kwargs):
+        template_dir = self.template_dir
+        if template_dir is None:
+            request.setResponseCode(500)
+            return ""
+        else:
+            return self.render_template('error/500.jinja2', **kwargs)
+
+    def render_template(self, template_name, **kwargs):
+        template_dir = self.template_dir
         try:
-            template = self.template_loader_.load(env, template_name)
+            template = self.template_loader_.load(self.template_env_, template_name)
         except TemplateNotFound:
             raise Exception("The template '{0}' was not found.".format(template_name))
-        return templ.render(**kwds).encode('utf-8')
+        return template.render(**kwargs).encode('utf-8')
     
-    def render_template_static(self, request):
-        template_dir = self.template_dir
-        path = request.path
-        static_base = self.get_template_static_base()
-        remainder = path[len(static_base):]
-        static_path = os.path.join(template_dir, remainder)
-        return File(static_path)
+    def create_template_static_resource(self):
+        static_path = os.path.join(self.template_dir, 'static')
+        static = File(static_path)
+        return static
 
+    def static(self, request):
+        return self.templateStaticResource_
