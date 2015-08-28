@@ -262,9 +262,6 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
-        #if self.template_dir is not None:
-        #    if request.path.startswith(self.get_template_static_base()):
-        #        return  self.templateStaticResource_
         for pattern in self.logoutPatterns:
             if does_url_match_pattern(request.uri, pattern):
                 sess = request.getSession()
@@ -425,25 +422,25 @@ class ProxyApp(object):
             return self.render_template_500()
         if root.tag != ('%sserviceResponse' % ns):
             log.msg((
-                    "[ERROR] error='Error parsing XML payload.  No `serviceResponse`.' "
+                    "[WARN] error='Error parsing XML payload.  No `serviceResponse`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_500()
+            return self.render_template_403()
         results = root.findall("%sauthenticationSuccess" % ns)
         if len(results) != 1:
             log.msg((
-                    "[ERROR] error='Error parsing XML payload.  No `authenticationSuccess`.' "
+                    "[WARN] error='Error parsing XML payload.  No `authenticationSuccess`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_500()
+            return self.render_template_403()
         success = results[0]
         results = success.findall("%suser" % ns)
         if len(results) != 1:
             log.msg((
-                    "[ERROR] error='Error parsing XML payload.  Not exactly 1 `user`.' "
+                    "[WARN] error='Error parsing XML payload.  Not exactly 1 `user`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_500()
+            return self.render_template_403()
         user = results[0]
         username = user.text
         attributes = success.findall("{0}attributes".format(ns))
@@ -620,14 +617,6 @@ class ProxyApp(object):
         else:
             return self.render_template('error/403.jinja2', **kwargs)
 
-    def render_template_404(self, **kwargs):
-        template_dir = self.template_dir
-        if template_dir is None:
-            request.setResponseCode(404)
-            return ""
-        else:
-            return self.render_template('error/404.jinja2', **kwargs)
-
     def render_template_500(self, **kwargs):
         template_dir = self.template_dir
         if template_dir is None:
@@ -651,3 +640,9 @@ class ProxyApp(object):
 
     def static(self, request):
         return self.templateStaticResource_
+
+    @app.handle_errors(Exception)
+    def handle_uncaught_errors(self, request, failure):
+        log.msg("[ERROR] Uncaught exception: {0}".format(failure))
+        return self.render_template_500(request=request, failure=failure)
+
