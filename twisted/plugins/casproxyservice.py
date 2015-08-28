@@ -55,6 +55,8 @@ class Options(usage.Options):
                         ["auth-info-resource", "A", None, 
                             "Resource on the main site that provides authentication info."],
                         ["help-plugin", None, None, "Help or a specific plugin."],
+                        ["template-dir", "t", None, "Folder containing templates."],
+                        ["template-resource", "T", "/_templates", "Base resource for templates."],
                     ]
 
     def __init__(self):
@@ -194,6 +196,8 @@ class MyServiceMaker(object):
             excluded_branches=excluded_branches,
             remote_user_header=options['header'],
             logoutPatterns=logouts,
+            template_dir=options['template-dir'],
+            template_resource=options['template-resource'],
             debug=options['debug'])
 
 

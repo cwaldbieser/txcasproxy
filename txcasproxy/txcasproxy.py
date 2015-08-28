@@ -18,6 +18,8 @@ from interfaces import (
 import proxyutils
 from .urls import does_url_match_pattern, parse_url_pattern
 from dateutil.parser import parse as parse_date
+from jinja2 import Environment, FileSystemLoader
+from jinja2.exceptions import TemplateNotFound
 from klein import Klein
 from OpenSSL import crypto
 import treq
@@ -50,7 +52,15 @@ class ProxyApp(object):
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
             excluded_resources=None, excluded_branches=None,
-            remote_user_header=None, logoutPatterns=None):
+            remote_user_header=None, logoutPatterns=None,
+            template_dir=None, template_resource='/_templates'):
+        self.template_dir = template_dir
+        if template_dir is not None:
+            self.template_loader_ = FileSystemLoader(template_dir)
+        if template_resource is not None:
+            if not template_resource.endswith('/'):
+                template_resource = "{0}/".format(template_resource)
+        self.template_resource = template_resource
         if logoutPatterns is not None:
             self.logoutPatterns = [parse_url_pattern(pattern) for pattern in logoutPatterns]
         for pattern in self.logoutPatterns:
@@ -245,6 +255,9 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
+        if self.template_dir is not None:
+            if request.path.startswith(self.get_template_static_base()):
+                return self.render_template_static(request)
         for pattern in self.logoutPatterns:
             if does_url_match_pattern(request.uri, pattern):
                 sess = request.getSession()
@@ -398,16 +411,32 @@ class ProxyApp(object):
         try:
             root = etree.fromstring(payload)
         except (etree.XMLSyntaxError,) as ex:
-            return request.redirect(service_url)
+            log.msg((
+                    "[ERROR] error='Error parsing XML payload.' "
+                    "service='{0}' ticket={1}'/n{2}"
+                    ).format(service_url, ticket, ex))
+            return self.render_template_500()
         if root.tag != ('%sserviceResponse' % ns):
-            return request.redirect(service_url)
+            log.msg((
+                    "[ERROR] error='Error parsing XML payload.  No `serviceResponse`.' "
+                    "service='{0}' ticket={1}'"
+                    ).format(service_url, ticket))
+            return self.render_template_500()
         results = root.findall("%sauthenticationSuccess" % ns)
         if len(results) != 1:
-            return request.redirect(service_url)
+            log.msg((
+                    "[ERROR] error='Error parsing XML payload.  No `authenticationSuccess`.' "
+                    "service='{0}' ticket={1}'"
+                    ).format(service_url, ticket))
+            return self.render_template_500()
         success = results[0]
         results = success.findall("%suser" % ns)
         if len(results) != 1:
-            return request.redirect(service_url)
+            log.msg((
+                    "[ERROR] error='Error parsing XML payload.  Not exactly 1 `user`.' "
+                    "service='{0}' ticket={1}'"
+                    ).format(service_url, ticket))
+            return self.render_template_500()
         user = results[0]
         username = user.text
         attributes = success.findall("{0}attributes".format(ns))
@@ -569,3 +598,39 @@ class ProxyApp(object):
             self.proxied_netloc,
             self.proxied_path,
             target_url)
+
+    def get_template_static_base(self):
+        if self.template_resource is None:
+            return None
+        else:
+            return '{0}static/'.format(self.template_resource)
+
+    def render_template_403(self, env=None):
+        return self.render_template('error/403.jinja2', env)
+
+    def render_template_500(self, env=None):
+        return self.render_template('error/500.jinja2', env)
+
+    def render_template(self, template_name, env=None):
+        if env is None:
+            env = {}
+        template_dir = self.template_dir
+        if template_dir is None:
+            request.setResponseCode(403)
+            return ""
+        else:
+            template_name = 'error/403.jinja2'
+        try:
+            template = self.template_loader_.load(env, template_name)
+        except TemplateNotFound:
+            raise Exception("The template '{0}' was not found.".format(template_name))
+        return templ.render(**kwds).encode('utf-8')
+    
+    def render_template_static(self, request):
+        template_dir = self.template_dir
+        path = request.path
+        static_base = self.get_template_static_base()
+        remainder = path[len(static_base):]
+        static_path = os.path.join(template_dir, remainder)
+        return File(static_path)
+
