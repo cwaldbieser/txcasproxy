@@ -39,6 +39,7 @@ def get_tag(plugin_str):
 class Options(usage.Options):
     optFlags = [
             ["help-plugins", None, "Help about available plugins."],
+            ["debug", 'd', "Errors served as HTML."],
         ]
 
     optParameters = [
@@ -192,7 +193,8 @@ class MyServiceMaker(object):
             excluded_resources=excluded_resources,
             excluded_branches=excluded_branches,
             remote_user_header=options['header'],
-            logoutPatterns=logouts)
+            logoutPatterns=logouts,
+            debug=options['debug'])
 
 
 # Now construct an object which *provides* the relevant interfaces

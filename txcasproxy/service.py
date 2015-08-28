@@ -12,7 +12,7 @@ class ProxyService(Service):
                     fqdn=None, authorities=None, plugins=None,
                     authInfoResource=None, authInfoEndpointStr=None,
                     excluded_resources=None, excluded_branches=None,
-                    remote_user_header=None, logoutPatterns=None): 
+                    remote_user_header=None, logoutPatterns=None, debug=False): 
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
@@ -36,6 +36,7 @@ class ProxyService(Service):
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
+        self.site.displayTracbacks = debug
         self.listeningPorts = []
 
     def startService(self):
@@ -47,6 +48,7 @@ class ProxyService(Service):
             authInfoApp = AuthInfoApp()
             self.authInfoApp = authInfoApp
             authInfoSite = Site(authInfoApp.app.resource())
+            authInfoSite.displayTracebacks = self.site.displayTracebacks
             endpoint = serverFromString(reactor, self.authInfoEndpointStr)
             d2 = endpoint.listen(authInfoSite)
             d2.addCallback(self.register_port, 'authInfoSite')
