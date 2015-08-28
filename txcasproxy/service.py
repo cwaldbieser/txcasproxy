@@ -39,7 +39,7 @@ class ProxyService(Service):
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
-        self.site.displayTracbacks = debug
+        self.site.displayTracebacks = debug
         self.listeningPorts = []
 
     def startService(self):
