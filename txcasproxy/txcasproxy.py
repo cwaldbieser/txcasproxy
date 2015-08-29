@@ -65,8 +65,9 @@ class ProxyApp(object):
             if not template_resource.endswith('/'):
                 template_resource = "{0}/".format(template_resource)
         if template_resource is not None and template_dir is not None:
-            static_resource = "{0}static/".format(template_resource)
-            self.static = self.app.route(static_resource, branch=True)(self.__class__.static)
+            static_base = "{0}static/".format(template_resource)
+            self.static = self.app.route(static_base, branch=True)(self.__class__.static)
+            self.static_base = static_base
         self.template_resource = template_resource
         if logoutPatterns is not None:
             self.logoutPatterns = [parse_url_pattern(pattern) for pattern in logoutPatterns]
@@ -631,7 +632,7 @@ class ProxyApp(object):
             template = self.template_loader_.load(self.template_env_, template_name)
         except TemplateNotFound:
             raise Exception("The template '{0}' was not found.".format(template_name))
-        return template.render(**kwargs).encode('utf-8')
+        return template.render(static_base=self.static_base, **kwargs).encode('utf-8')
     
     def create_template_static_resource(self):
         static_path = os.path.join(self.template_dir, 'static')
