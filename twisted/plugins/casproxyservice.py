@@ -57,6 +57,7 @@ class Options(usage.Options):
                         ["help-plugin", None, None, "Help or a specific plugin."],
                         ["template-dir", "t", None, "Folder containing templates."],
                         ["template-resource", "T", "/_templates", "Base resource for templates."],
+                        ["session-length", "s", 900, "Session length in seconds."],
                     ]
 
     def __init__(self):
@@ -198,7 +199,8 @@ class MyServiceMaker(object):
             logoutPatterns=logouts,
             template_dir=options['template-dir'],
             template_resource=options['template-resource'],
-            debug=options['debug'])
+            debug=options['debug'],
+            session_length=options['session-length'])
 
 
 # Now construct an object which *provides* the relevant interfaces

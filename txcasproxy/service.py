@@ -5,7 +5,8 @@ from authinfo import AuthInfoApp
 from twisted.application.service import Service
 from twisted.internet import reactor
 from twisted.internet.endpoints import serverFromString
-from twisted.web.server import Site
+from twisted.web.server import Session, Site
+
 
 class ProxyService(Service):
     def __init__(self, endpoint_s, proxied_url, cas_info, 
@@ -13,7 +14,9 @@ class ProxyService(Service):
                     authInfoResource=None, authInfoEndpointStr=None,
                     excluded_resources=None, excluded_branches=None,
                     remote_user_header=None, logoutPatterns=None, 
-                    template_dir=None, template_resource=None, debug=False): 
+                    template_dir=None, template_resource=None, 
+                    session_length=900, debug=False): 
+        session_length = int(session_length)
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
         if endpoint_s.startswith("ssl:"):
@@ -39,6 +42,13 @@ class ProxyService(Service):
         root = app.app.resource()
         self.app = app
         self.site = Site(root)
+
+        def sessionFactory(site, uid, reactor=None):
+            s = Session(site, uid, reactor=reactor)
+            s.sessionTimeout = session_length
+            return s
+        
+        self.site.sessionFactory = sessionFactory
         self.site.displayTracebacks = debug
         self.listeningPorts = []
 
