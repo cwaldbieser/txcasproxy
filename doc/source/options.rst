@@ -142,7 +142,8 @@ should be `Jinja2 templates`_.  These templates can access the HTTP request obje
 `request`.  The :file:`static` folder may contain any static assets required for rendering the
 final HTML pages (e.g. images, stylesheets, scripts).  These will be served from 
 `/_templates/static` by default.  You can change the root resource with the 
-:option:`template-resource` option.
+:option:`template-resource` option.  The name `static_base` is made available to the templates
+and can be used as a prefix for static resources (the prefix includes a trailing slash).
 
 .. note::
 
