@@ -25,6 +25,7 @@ Options
       -t, --template-dir=          Folder containing templates.
       -T, --template-resource=     Base resource for templates. [default:
                                    /_templates]
+      -S, --session-length=        Session length in seconds. [default: 900]
           --help                   Display this help and exit.
           --plugin=                Include a plugin.
           --version                Display Twisted version and exit.

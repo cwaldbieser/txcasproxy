@@ -57,7 +57,7 @@ class Options(usage.Options):
                         ["help-plugin", None, None, "Help or a specific plugin."],
                         ["template-dir", "t", None, "Folder containing templates."],
                         ["template-resource", "T", "/_templates", "Base resource for templates."],
-                        ["session-length", "s", 900, "Session length in seconds."],
+                        ["session-length", "S", 900, "Session length in seconds."],
                     ]
 
     def __init__(self):
