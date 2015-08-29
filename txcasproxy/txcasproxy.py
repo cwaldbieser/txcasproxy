@@ -609,21 +609,21 @@ class ProxyApp(object):
         else:
             return '{0}static/'.format(self.template_resource)
 
-    def render_template_403(self, **kwargs):
+    def render_template_403(self, request, **kwargs):
         template_dir = self.template_dir
         if template_dir is None:
             request.setResponseCode(403)
             return ""
         else:
-            return self.render_template('error/403.jinja2', **kwargs)
+            return self.render_template('error/403.jinja2', request=request, **kwargs)
 
-    def render_template_500(self, **kwargs):
+    def render_template_500(self, request, **kwargs):
         template_dir = self.template_dir
         if template_dir is None:
             request.setResponseCode(500)
             return ""
         else:
-            return self.render_template('error/500.jinja2', **kwargs)
+            return self.render_template('error/500.jinja2', request=request, **kwargs)
 
     def render_template(self, template_name, **kwargs):
         template_dir = self.template_dir
