@@ -8,6 +8,8 @@ Options
     Options:
           --help-plugins           Help about available plugins.
       -d, --debug                  Errors served as HTML.
+          --logout-passthrough     Pass the logout request through to backend
+                                   service prior to intercepting and redirecting.
       -e, --endpoint=              An endpoint connection string.
       -p, --proxied-url=           The base URL to proxy.
       -c, --cas-login=             The CAS /login URL.
@@ -86,6 +88,13 @@ allows you to specify a logout URL which you can point to the CAS logout URL.
 This allows the application to perform its own session termination before the
 SSO session is ended.  It is also useful if the service does not participate in
 an SSO session but simply uses a CAS service to authenticate.
+
+The :option:`logout-passthrough` option can be used to alter the 
+:option:`cas-logout` behavior.  The initial request will be passed through to
+the proxied service, but its response will be silently discarded.  The proxy
+will issue a response to redirect the requesting agent to the CAS logout
+URL.  This is useful if you require the proxied service to terminate its
+own local session in addition to terminating the CAS session.
 
 ----------------------------------
 Authentication Information Service

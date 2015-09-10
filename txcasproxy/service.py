@@ -14,6 +14,7 @@ class ProxyService(Service):
                     authInfoResource=None, authInfoEndpointStr=None,
                     excluded_resources=None, excluded_branches=None,
                     remote_user_header=None, logoutPatterns=None, 
+                    logoutPassthrough=False,
                     template_dir=None, template_resource=None, 
                     session_length=900, debug=False): 
         session_length = int(session_length)
@@ -36,6 +37,7 @@ class ProxyService(Service):
             excluded_branches=excluded_branches,
             remote_user_header=remote_user_header,
             logoutPatterns=logoutPatterns,
+            logoutPassthrough=logoutPassthrough,
             template_dir=template_dir,
             template_resource=template_resource)
         app.authInfoResource = authInfoResource

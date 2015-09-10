@@ -50,12 +50,15 @@ class ProxyApp(object):
     authInfoCallback = None
     remoteUserHeader = 'Remote-User'
     logoutPatterns = None
+    logoutPassthrough = False
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
             excluded_resources=None, excluded_branches=None,
             remote_user_header=None, logoutPatterns=None,
+            logoutPassthrough=False,
             template_dir=None, template_resource='/_templates'):
+        self.logoutPassthrough = logoutPassthrough
         self.template_dir = template_dir
         if template_dir is not None:
             self.template_loader_ = FileSystemLoader(template_dir)
@@ -270,6 +273,8 @@ class ProxyApp(object):
                 self._expired(sess_uid)
                 cas_logout = self.cas_info.get('logout_url', None)
                 if cas_logout is not None:
+                    if self.logoutPassthrough:
+                        d = self.reverse_proxy(request, protected=False)
                     return request.redirect(cas_logout)
                 else:
                     return self.reverse_proxy(request, protected=False)

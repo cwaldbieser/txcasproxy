@@ -40,6 +40,7 @@ class Options(usage.Options):
     optFlags = [
             ["help-plugins", None, "Help about available plugins."],
             ["debug", 'd', "Errors served as HTML."],
+            ["logout-passthrough", None, "Pass the logout request through to backend service prior to intercepting and redirecting."],
         ]
 
     optParameters = [
@@ -197,6 +198,7 @@ class MyServiceMaker(object):
             excluded_branches=excluded_branches,
             remote_user_header=options['header'],
             logoutPatterns=logouts,
+            logoutPassthrough=options['logout-passthrough'],
             template_dir=options['template-dir'],
             template_resource=options['template-resource'],
             debug=options['debug'],
