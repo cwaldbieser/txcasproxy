@@ -12,6 +12,7 @@ from urllib import urlencode
 import urlparse
 from ca_trust import CustomPolicyForHTTPS
 from interfaces import (
+        IAccessControl,
         IRProxyInfoAcceptor, 
         IResponseContentModifier,
         ICASRedirectHandler, IResourceInterceptor,
@@ -112,6 +113,7 @@ class ProxyApp(object):
         info_acceptors = []
         cas_redirect_handlers = []
         interceptors = []
+        access_control = []
         for plugin in plugins:
             if IResponseContentModifier.providedBy(plugin):
                 content_modifiers.append(plugin)
@@ -121,6 +123,8 @@ class ProxyApp(object):
                 cas_redirect_handlers.append(plugin)
             if IResourceInterceptor.providedBy(plugin):
                 interceptors.append(plugin)
+            if IAccessControl.providedBy(plugin):
+                access_control.append(plugin)
         self.info_acceptors = info_acceptors
         content_modifiers.sort(key=lambda x: x.mod_sequence)
         self.content_modifiers = content_modifiers
@@ -128,6 +132,8 @@ class ProxyApp(object):
         self.cas_redirect_handlers = cas_redirect_handlers
         interceptors.sort(key=lambda x: x.interceptor_sequence)
         self.interceptors = interceptors
+        access_control.sort(key=lambda x: x.ac_sequence)
+        self.access_control = access_control
         # Create static resources.
         static_resources = {}
         for plugin in plugins:
@@ -425,20 +431,20 @@ class ProxyApp(object):
                     "[ERROR] error='Error parsing XML payload.' "
                     "service='{0}' ticket={1}'/n{2}"
                     ).format(service_url, ticket, ex))
-            return self.render_template_500()
+            return self.render_template_500(request)
         if root.tag != ('%sserviceResponse' % ns):
             log.msg((
                     "[WARN] error='Error parsing XML payload.  No `serviceResponse`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_403()
+            return self.render_template_403(request)
         results = root.findall("%sauthenticationSuccess" % ns)
         if len(results) != 1:
             log.msg((
                     "[WARN] error='Error parsing XML payload.  No `authenticationSuccess`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_403()
+            return self.render_template_403(request)
         success = results[0]
         results = success.findall("%suser" % ns)
         if len(results) != 1:
@@ -446,7 +452,7 @@ class ProxyApp(object):
                     "[WARN] error='Error parsing XML payload.  Not exactly 1 `user`.' "
                     "service='{0}' ticket={1}'"
                     ).format(service_url, ticket))
-            return self.render_template_403()
+            return self.render_template_403(request)
         user = results[0]
         username = user.text
         attributes = success.findall("{0}attributes".format(ns))
@@ -456,6 +462,20 @@ class ProxyApp(object):
                 tag_name = elm.tag[len(ns):]
                 value = elm.text
                 attrib_map.setdefault(tag_name, []).append(value)
+        # Access control plugins
+        access_control = self.access_control
+        for ac_plugin in access_control:
+            is_allowed, reason = ac_plugin.isAllowed(username, attrib_map)
+            if not is_allowed:
+                log.msg((
+                        "[INFO] Access denied:  user='{username}' ac_plugin='{ac_plugin}' "
+                        "reason={reason}, service='{service}' ticket='{ticket}'"
+                        ).format(
+                            username=username, 
+                            ac_plugin=ac_plugin.tagname, 
+                            service=service_url, 
+                            ticket=ticket))
+                return self.render_template_403(request, username=username, reason=reason)
         # Update session session
         valid_sessions = self.valid_sessions
         logout_tickets = self.logout_tickets

@@ -60,3 +60,15 @@ class ICASRedirectHandler(Interface):
         """
         Inspect and return a modified or unmodified service URL.
         """
+
+class IAccessControl(Interface):
+
+    tagname = Attribute("Plugin tag name")
+    ac_sequence = Attribute("Access control sequence number.")
+
+    def isAllowed(username, attrib_map):
+        """
+        Returns (is_allowed, reason)
+        If `is_allowed` is True, `reason` should be None.
+        `reason` should be suitable for display to an end user
+        """
