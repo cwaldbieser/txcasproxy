@@ -474,7 +474,8 @@ class ProxyApp(object):
                             username=username, 
                             ac_plugin=ac_plugin.tagname, 
                             service=service_url, 
-                            ticket=ticket))
+                            ticket=ticket,
+                            reason=reason))
                 return self.render_template_403(request, username=username, reason=reason)
         # Update session session
         valid_sessions = self.valid_sessions

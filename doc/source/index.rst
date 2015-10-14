@@ -15,6 +15,17 @@ Contents:
    options
    examples
 
+-------
+Plugins
+-------
+
+.. toctree::
+    :maxdepth: 1
+
+    plugins/access_control.rst
+
+
+==================
 Indices and tables
 ==================
 

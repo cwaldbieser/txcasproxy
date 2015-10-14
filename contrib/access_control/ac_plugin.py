@@ -1,5 +1,6 @@
 
 import shlex
+import string
 from textwrap import dedent
 from txcasproxy.interfaces import (
     IRProxyPluginFactory, 
@@ -73,10 +74,17 @@ class AccessControlPlugin(object):
             if not attrib in attrib_map:
                 msg = "Missing attribute `{0}`.".format(attrib)
                 return False, msg        
+            if info is None:
+                continue
             if 'allowed_values' in info:
                 allowed_values = set(info['allowed_values'])
-                attrib_value = attrib_map[attrib]
-                if no attrib_value in allowed_values:
+                attrib_values = attrib_map[attrib]
+                match_found = False
+                for attrib_value in attrib_values:
+                    if attrib_value in allowed_values:
+                        match_found = True
+                        break
+                if not match_found:
                     msg = "Attribute '{0}' value '{1}' not in allowed values.".format(
                         attrib,
                         attrib_value)
