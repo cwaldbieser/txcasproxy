@@ -20,7 +20,7 @@ class ProxyService(Service):
         session_length = int(session_length)
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
-        if endpoint_s.startswith("ssl:"):
+        if endpoint_s.startswith("ssl:") or endpoint_s.startswith('tls:'):
             is_https = True
         else:
             is_https = False

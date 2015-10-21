@@ -19,6 +19,7 @@ from interfaces import (
         IStaticResourceProvider)
 import proxyutils
 from .urls import does_url_match_pattern, parse_url_pattern
+from websocket_proxy import makeWebsocketProxyResource
 from dateutil.parser import parse as parse_date
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
@@ -151,6 +152,8 @@ class ProxyApp(object):
             handler = lambda self, request: File(resource_dir)
             handler = self.app.route(resource_base, branch=True)(handler)
             self.static_handlers.append(handler)
+        # Websocket mappings.
+        self._websockets = {}
 
     def handle_port_set(self):
         fqdn = self.fqdn
@@ -535,6 +538,11 @@ class ProxyApp(object):
         for interceptor in interceptors:
             if interceptor.should_resource_be_intercepted(url, request.method, req_headers, request):
                 return interceptor.handle_resource(url, request.method, req_headers, request)
+        # Check if this is a request for a websocket.
+        d = self.checkForWebsocketUpgrade(request)
+        if d is not None:
+            return d
+        # Typical reverse proxying.    
         log.msg("[INFO] Proxying URL: %s" % url)
         http_client = HTTPClient(self.agent) 
         d = http_client.request(request.method, url, **kwds)
@@ -591,6 +599,65 @@ class ProxyApp(object):
         d.addCallback(treq.content)
         d.addCallback(mod_content, request)
         return d
+
+    def checkForWebsocketUpgrade(self, request):
+        log.msg("[DEBUG] Checking for websocket upgrade ...")
+        
+        def _extract(name):
+            raw_value = request.getHeader(name)
+            if raw_value is None:
+                return set([])
+            else:
+                return set(raw_value.split(', '))
+
+        upgrade = _extract("Upgrade")
+        connection = _extract("Connection")
+        if 'websocket' in upgrade and 'Upgrade' in connection:
+            uri = request.uri
+            websockets = self._websockets
+            if uri in websockets:
+                return websockets[uri]
+            else:
+                proxy_fqdn = self.fqdn
+                proxy_port = self.port
+                proxied_scheme = self.proxied_scheme
+                proxied_netloc = self.proxied_netloc
+                proxied_path = self.proxied_path
+                if self.is_https:
+                    scheme = 'wss'
+                else:
+                    scheme = 'ws'
+                netloc = "{0}:{1}".format(proxy_fqdn, proxy_port)
+                proxy_url = "{0}://{1}{2}".format(scheme, netloc, request.uri)  
+                log.msg("[DEBUG] [websockets] proxy_url='{0}'".format(proxy_url))
+                if proxied_scheme == 'https':
+                    proxied_scheme = 'wss'
+                else:
+                    proxied_scheme = 'ws'
+                proxied_url = proxyutils.proxy_url_to_proxied_url(proxied_scheme, proxy_fqdn, proxy_port, proxied_netloc, proxied_path, proxy_url)
+                log.msg("[DEBUG] [websockets] proxied_url='{0}'".format(proxied_url))
+                kind = "tcp"
+                proxied_host = "localhost"
+                proxied_port = 8888
+                extra = ""
+                proxied_endpoint_str = "{0}:host={1}:port={2}{3}".format(
+                    kind,
+                    proxied_host,
+                    proxied_port,
+                    extra
+                )
+                if proxied_url is not None:
+                    headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
+                    newheaders = {}
+                    for k, v in headers.items():
+                        newheaders[k] = ', '.join(v)
+                    headers = newheaders
+                    log.msg("[DEBUG] headers => {0}".format(headers))
+                    log.msg("[DEBUG] Returning websocket resource ...")
+                    resource = makeWebsocketProxyResource(proxy_url, proxied_endpoint_str, proxied_url, headers, self.reactor)
+                    websockets[uri] = resource
+                    return resource
+        return None
     
     def mod_cookies(self, value_list):
         proxied_path = self.proxied_path
