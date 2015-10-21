@@ -23,3 +23,5 @@ ipaddress==1.0.14
 requests==2.7.0
 PyYAML==3.11
 treq==15.0.0
+autobahn==0.10.9
+txaio==2.0.4
