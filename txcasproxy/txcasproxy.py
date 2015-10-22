@@ -5,7 +5,6 @@ import cookielib
 import datetime
 import json
 import os.path
-import pprint
 import socket
 import sys
 from urllib import urlencode
@@ -225,7 +224,7 @@ class ProxyApp(object):
                     new_referer = self.proxy_url_to_proxied_url(referer)
                     if new_referer is not None:
                         h[k] = [new_referer]
-                        log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
+                        #log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
         return h
 
     def _check_for_logout(self, request):
@@ -234,27 +233,27 @@ class ProxyApp(object):
         try:
             root = etree.fromstring(data)
         except Exception as ex:
-            log.msg("[DEBUG] Not XML.\n%s" % str(ex))
+            #log.msg("[DEBUG] Not XML.\n%s" % str(ex))
             root = None
         if (root is not None) and (root.tag == "%sLogoutRequest" % samlp_ns):
             instant = root.get('IssueInstant')
             if instant is not None:
-                log.msg("[DEBUG] instant string == '%s'" % instant)
+                #log.msg("[DEBUG] instant string == '%s'" % instant)
                 try:
                     instant = parse_date(instant)
                 except ValueError:
-                    log.msg("[WARN] Odd issue_instant supplied: '%s'." % instant)
+                    #log.msg("[WARN] Odd issue_instant supplied: '%s'." % instant)
                     instant = None
                 if instant is not None:
                     utcnow = datetime.datetime.utcnow()
-                    log.msg("[DEBUG] UTC now == %s" % utcnow.strftime("%Y-%m-%dT%H:%M:%S"))
+                    #log.msg("[DEBUG] UTC now == %s" % utcnow.strftime("%Y-%m-%dT%H:%M:%S"))
                     seconds = abs((utcnow - instant.replace(tzinfo=None)).total_seconds())
                     if seconds <= self.logout_instant_skew:
                         results = root.findall("%sSessionIndex" % samlp_ns)
                         if len(results) == 1:
                             result = results[0]
                             ticket = result.text
-                            log.msg("[INFO] Received request to logout session with ticket '%s'." % ticket)
+                            #log.msg("[INFO] Received request to logout session with ticket '%s'." % ticket)
                             sess_uid = self.logout_tickets.get(ticket, None)
                             if sess_uid is not None:
                                 self._expired(sess_uid)
@@ -262,15 +261,15 @@ class ProxyApp(object):
                             else:
                                 log.msg("[WARN] No matching session for logout request for ticket '%s'." % ticket)
                     else:
-                        log.msg("[DEBUG] Issue instant was not within %d seconds of actual time." % self.logout_instant_skew)
+                        log.msg("[WARN] Issue instant was not within %d seconds of actual time." % self.logout_instant_skew)
                 else:
-                    log.msg("[DEBUG] Could not parse issue instant.")
+                    log.msg("[WARN] Could not parse issue instant.")
             else:
-                log.msg("[DEBUG] 'IssueInstant' attribute missing from root.")
+                log.msg("[WARN] 'IssueInstant' attribute missing from root.")
         elif root is None:
-            log.msg("[DEBUG] Could not parse XML.")
-        else:
-            log.msg("[DEBUG] root.tag == '%s'" % root.tag)
+            log.msg("[ERROR] Could not parse XML.")
+        #else:
+        #    log.msg("[DEBUG] root.tag == '%s'" % root.tag)
         return False
 
     @app.route("/", branch=True)
@@ -293,23 +292,22 @@ class ProxyApp(object):
         sess = request.getSession()
         sess_uid = sess.uid
         if not sess_uid in valid_sessions:
-            log.msg("[DEBUG] session {0} not in valid sessions.  Will authenticate with CAS.".format(sess_uid))
+            #log.msg("[DEBUG] session {0} not in valid sessions.  Will authenticate with CAS.".format(sess_uid))
             if request.method == 'POST':
                 headers = request.requestHeaders
                 if headers.hasHeader("Content-Type"):
                     ct_list =  headers.getRawHeaders("Content-Type") 
-                    log.msg("[DEBUG] ct_list: %s" % str(ct_list))
+                    #log.msg("[DEBUG] ct_list: %s" % str(ct_list))
                     for ct in ct_list:
                         if ct.find('text/xml') != -1 or ct.find('application/xml') != -1:
                             if self._check_for_logout(request):
                                 return ""
                             else:
                                 # If reading the body failed the first time, it won't succeed later!
-                                log.msg("[DEBUG] _check_for_logout() returned failure.")
+                                #log.msg("[DEBUG] _check_for_logout() returned failure.")
                                 break
-                else:
-                    log.msg("[DEBUG] No content-type.")
-                            
+                #else:
+                #    log.msg("[DEBUG] No content-type.")
             # CAS Authentication
             # Does this request have a ticket?  I.e. is it coming back from a successful
             # CAS authentication?
@@ -326,10 +324,10 @@ class ProxyApp(object):
             d = self.redirect_to_cas_login(request)
             return d
         elif request.path == self.authInfoResource:
-            log.msg("[DEBUG] Providing authentication info.")
+            #log.msg("[DEBUG] Providing authentication info.")
             return self.deliver_auth_info(request)
         else:
-            log.msg("[DEBUG] session {0} is in valid sessions.".format(sess_uid))
+            #log.msg("[DEBUG] session {0} is in valid sessions.".format(sess_uid))
             d = self.reverse_proxy(request)
             return d
 
@@ -395,7 +393,7 @@ class ProxyApp(object):
             param_str = urlencode(qs_map, doseq=True)
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         url = urlparse.urlunparse(p)
-        log.msg("[DEBUG] Redirecting to CAS with URL '{0}'.".format(url))
+        #log.msg("[DEBUG] Redirecting to CAS with URL '{0}'.".format(url))
         d = request.redirect(url)
         return d
         
@@ -417,7 +415,7 @@ class ProxyApp(object):
         p = urlparse.urlparse(self.cas_info['service_validate_url'])
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         service_validate_url = urlparse.urlunparse(p)
-        log.msg("[INFO] requesting service-validate URL '%s' ..." % service_validate_url)
+        #log.msg("[INFO] requesting service-validate URL '%s' ..." % service_validate_url)
         http_client = HTTPClient(self.agent) 
         d = http_client.get(service_validate_url)
         d.addCallback(treq.content)
@@ -425,7 +423,7 @@ class ProxyApp(object):
         return d
         
     def parse_sv_results(self, payload, service_url, ticket, request):
-        log.msg("[INFO] Parsing /serviceValidate results  ...")
+        #log.msg("[INFO] Parsing /serviceValidate results  ...")
         ns = self.ns
         try:
             root = etree.fromstring(payload)
@@ -543,7 +541,7 @@ class ProxyApp(object):
         if d is not None:
             return d
         # Typical reverse proxying.    
-        log.msg("[INFO] Proxying URL: %s" % url)
+        #log.msg("[INFO] Proxying URL: %s" % url)
         http_client = HTTPClient(self.agent) 
         d = http_client.request(request.method, url, **kwds)
         def process_response(response, request):
@@ -563,21 +561,14 @@ class ProxyApp(object):
                     new_location = self.proxied_url_to_proxy_url(proxy_scheme, location)
                     if new_location is not None:
                         resp_header_map['Location'] = [new_location]
-                        log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
+                        #log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
             request.setResponseCode(response.code, message=response.phrase)
             for k,v in resp_header_map.iteritems():
                 if k == 'Set-Cookie':
                     v = self.mod_cookies(v)
-                print("Browser Response >>> Setting response header: %s: %s" % (k, v))
+                #print("Browser Response >>> Setting response header: %s: %s" % (k, v))
                 req_resp_headers.setRawHeaders(k, v)
             return response
-            
-        def show_cookies(resp):
-            jar = resp.cookies()
-            print("Cookie Jar:")
-            pprint.pprint(cookiejar)
-            print("")
-            return resp
             
         def mod_content(body, request):
             """
@@ -594,7 +585,6 @@ class ProxyApp(object):
             else:
                 return d
             
-        d.addCallback(show_cookies)
         d.addCallback(process_response, request)
         d.addCallback(treq.content)
         d.addCallback(mod_content, request)
@@ -615,8 +605,10 @@ class ProxyApp(object):
         if 'websocket' in upgrade and 'Upgrade' in connection:
             uri = request.uri
             websockets = self._websockets
-            if uri in websockets:
-                return websockets[uri]
+            #if uri in websockets:
+            #    return websockets[uri]
+            if False:
+                pass
             else:
                 proxy_fqdn = self.fqdn
                 proxy_port = self.port
@@ -634,12 +626,28 @@ class ProxyApp(object):
                     proxied_scheme = 'wss'
                 else:
                     proxied_scheme = 'ws'
-                proxied_url = proxyutils.proxy_url_to_proxied_url(proxied_scheme, proxy_fqdn, proxy_port, proxied_netloc, proxied_path, proxy_url)
+                proxied_url = proxyutils.proxy_url_to_proxied_url(
+                    proxied_scheme, 
+                    proxy_fqdn, 
+                    proxy_port, 
+                    proxied_netloc, 
+                    proxied_path, 
+                    proxy_url,
+                )
                 log.msg("[DEBUG] [websockets] proxied_url='{0}'".format(proxied_url))
+                origin = proxied_url
                 kind = "tcp"
-                proxied_host = "localhost"
-                proxied_port = 8888
-                extra = ""
+                if proxied_scheme == 'wss':
+                    kind = 'ssl'
+                parts = proxied_netloc.split(":", 1)
+                proxied_host = parts[0]
+                if len(parts) == 2:
+                    proxied_port = int(parts[1])
+                elif proxied_scheme == 'wss':
+                    proxied_port =  443
+                else:
+                    proxied_port = 80
+                extra = "" #TODO: SSL options.
                 proxied_endpoint_str = "{0}:host={1}:port={2}{3}".format(
                     kind,
                     proxied_host,
@@ -647,15 +655,15 @@ class ProxyApp(object):
                     extra
                 )
                 if proxied_url is not None:
-                    headers = self.mod_headers(dict(request.requestHeaders.getAllRawHeaders()))
-                    newheaders = {}
-                    for k, v in headers.items():
-                        newheaders[k] = ', '.join(v)
-                    headers = newheaders
-                    log.msg("[DEBUG] headers => {0}".format(headers))
                     log.msg("[DEBUG] Returning websocket resource ...")
-                    resource = makeWebsocketProxyResource(proxy_url, proxied_endpoint_str, proxied_url, headers, self.reactor)
-                    websockets[uri] = resource
+                    resource = makeWebsocketProxyResource(
+                        proxy_url, 
+                        proxied_endpoint_str, 
+                        proxied_url, 
+                        reactor=self.reactor, 
+                        origin=origin,
+                        debug=True)
+                    #websockets[uri] = resource
                     return resource
         return None
     
