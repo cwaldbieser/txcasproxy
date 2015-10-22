@@ -151,8 +151,6 @@ class ProxyApp(object):
             handler = lambda self, request: File(resource_dir)
             handler = self.app.route(resource_base, branch=True)(handler)
             self.static_handlers.append(handler)
-        # Websocket mappings.
-        self._websockets = {}
 
     def handle_port_set(self):
         fqdn = self.fqdn
@@ -591,7 +589,6 @@ class ProxyApp(object):
         return d
 
     def checkForWebsocketUpgrade(self, request):
-        log.msg("[DEBUG] Checking for websocket upgrade ...")
         
         def _extract(name):
             raw_value = request.getHeader(name)
@@ -604,67 +601,57 @@ class ProxyApp(object):
         connection = _extract("Connection")
         if 'websocket' in upgrade and 'Upgrade' in connection:
             uri = request.uri
-            websockets = self._websockets
-            #if uri in websockets:
-            #    return websockets[uri]
-            if False:
-                pass
+            proxy_fqdn = self.fqdn
+            proxy_port = self.port
+            proxied_scheme = self.proxied_scheme
+            proxied_netloc = self.proxied_netloc
+            proxied_path = self.proxied_path
+            if self.is_https:
+                scheme = 'wss'
             else:
-                proxy_fqdn = self.fqdn
-                proxy_port = self.port
-                proxied_scheme = self.proxied_scheme
-                proxied_netloc = self.proxied_netloc
-                proxied_path = self.proxied_path
-                if self.is_https:
-                    scheme = 'wss'
-                else:
-                    scheme = 'ws'
-                netloc = "{0}:{1}".format(proxy_fqdn, proxy_port)
-                proxy_url = "{0}://{1}{2}".format(scheme, netloc, request.uri)  
-                log.msg("[DEBUG] [websockets] proxy_url='{0}'".format(proxy_url))
-                if proxied_scheme == 'https':
-                    proxied_scheme = 'wss'
-                else:
-                    proxied_scheme = 'ws'
-                proxied_url = proxyutils.proxy_url_to_proxied_url(
-                    proxied_scheme, 
-                    proxy_fqdn, 
-                    proxy_port, 
-                    proxied_netloc, 
-                    proxied_path, 
-                    proxy_url,
-                )
-                log.msg("[DEBUG] [websockets] proxied_url='{0}'".format(proxied_url))
-                origin = proxied_url
-                kind = "tcp"
-                if proxied_scheme == 'wss':
-                    kind = 'ssl'
-                parts = proxied_netloc.split(":", 1)
-                proxied_host = parts[0]
-                if len(parts) == 2:
-                    proxied_port = int(parts[1])
-                elif proxied_scheme == 'wss':
-                    proxied_port =  443
-                else:
-                    proxied_port = 80
-                extra = "" #TODO: SSL options.
-                proxied_endpoint_str = "{0}:host={1}:port={2}{3}".format(
-                    kind,
-                    proxied_host,
-                    proxied_port,
-                    extra
-                )
-                if proxied_url is not None:
-                    log.msg("[DEBUG] Returning websocket resource ...")
-                    resource = makeWebsocketProxyResource(
-                        proxy_url, 
-                        proxied_endpoint_str, 
-                        proxied_url, 
-                        reactor=self.reactor, 
-                        origin=origin,
-                        debug=True)
-                    #websockets[uri] = resource
-                    return resource
+                scheme = 'ws'
+            netloc = "{0}:{1}".format(proxy_fqdn, proxy_port)
+            proxy_url = "{0}://{1}{2}".format(scheme, netloc, request.uri)  
+            if proxied_scheme == 'https':
+                proxied_scheme = 'wss'
+            else:
+                proxied_scheme = 'ws'
+            proxied_url = proxyutils.proxy_url_to_proxied_url(
+                proxied_scheme, 
+                proxy_fqdn, 
+                proxy_port, 
+                proxied_netloc, 
+                proxied_path, 
+                proxy_url,
+            )
+            origin = proxied_url
+            kind = "tcp"
+            if proxied_scheme == 'wss':
+                kind = 'ssl'
+            parts = proxied_netloc.split(":", 1)
+            proxied_host = parts[0]
+            if len(parts) == 2:
+                proxied_port = int(parts[1])
+            elif proxied_scheme == 'wss':
+                proxied_port =  443
+            else:
+                proxied_port = 80
+            extra = "" #TODO: SSL options.
+            proxied_endpoint_str = "{0}:host={1}:port={2}{3}".format(
+                kind,
+                proxied_host,
+                proxied_port,
+                extra
+            )
+            if proxied_url is not None:
+                resource = makeWebsocketProxyResource(
+                    proxy_url, 
+                    proxied_endpoint_str, 
+                    proxied_url, 
+                    reactor=self.reactor, 
+                    origin=origin,
+                    debug=True)
+                return resource
         return None
     
     def mod_cookies(self, value_list):
