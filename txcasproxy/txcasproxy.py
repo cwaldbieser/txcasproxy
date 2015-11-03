@@ -210,9 +210,7 @@ class ProxyApp(object):
             for k in keymap['content-length']:
                 del h[k]
         if 'referer' in keymap:
-            for k in keymap['referer']:
-                del h[k]
-        if False:
+            referrer_handled = False 
             keys = keymap['referer']
             if len(keys) == 1:
                 k = keys[0]
@@ -222,7 +220,11 @@ class ProxyApp(object):
                     new_referer = self.proxy_url_to_proxied_url(referer)
                     if new_referer is not None:
                         h[k] = [new_referer]
-                        #log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
+                        log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
+                        referer_handled = True
+            if not referer_handled:
+                for k in keymap['referer']:
+                    del h[k]
         return h
 
     def _check_for_logout(self, request):
