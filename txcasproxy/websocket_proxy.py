@@ -21,25 +21,30 @@ class ProxiedWSClientProtocol(WebSocketClientProtocol):
         WebSocketClientProtocol.__init__(self)
         self._queue = []
 
-    def onConnect(self, r):
-        log.msg("[EVENT] ProxiedWSClientProtocol.onConnect()")
+    def log(self, msg, important=False):
+        if important or self.factory.verbose:
+            if important:
+                tag = "INFO"
+            else:
+                tag = "DEBUG"
+            log.msg("[{0}] {1}".format(tag, msg))
 
     def onOpen(self):
-        log.msg("[EVENT] ProxiedWSClientProtocol.onOpen()")
+        self.log("Connected to proxied websocket ({0}.".format(self.factory.url))
         self.connectedToProxiedWS = True
-        log.msg("[DEBUG] Queue size={0}".format(len(self._queue)))
+        self.log("Queue size={0}".format(len(self._queue)))
         for msg, isBinary in self._queue:
-            log.msg("[DEBUG] Sending queued message to proxied ws ...")
-            if not isBinary:
-                log.msg("[DEBUG] msg='{0}'".format(msg))
             self.sendMessage(msg, isBinary)
-        log.msg("[DEBUG] Resetting queue...")
         self._queue = []
 
     def sendMessageToProxiedWS(self, msg, isBinary):
-        log.msg("[EVENT] sending message to proxied websocket ...")
-        log.msg("[DEBUG] connected to proxied ws={0}".format(self.connectedToProxiedWS))
         if self.connectedToProxiedWS:
+            if isBinary:
+                self.log("sending binary msg: websocket='{0}'".format(
+                    self.factory.url))
+            else:
+                self.log("sending: websocket='{0}' msg='{1}'".format(
+                    self.factory.url, msg))
             self.sendMessage(msg.encode('utf8'), isBinary)
         else:
             q = self._queue
@@ -49,9 +54,16 @@ class ProxiedWSClientProtocol(WebSocketClientProtocol):
                 raise Execption("Queue overflow error.")
 
     def onMessage(self, payload, isBinary):
+        if isBinary:
+            self.log("received binary msg: websocket='{0}'".format(
+                self.factory.url))
+        else:
+            self.log("received: websocket='{0}' msg='{1}'".format(
+                self.factory.url, payload))
         self.onMessageCallback(payload, isBinary)
 
     def onClose(self, wasClean, code, reason):
+        self.log("proxied websocket ({0}) closed.".format(self.factory.url))
         self.onCloseCallback(wasClean, code, reason)
 
 
@@ -59,9 +71,9 @@ class ProxiedWSClientProtocolFactory(WebSocketClientFactory):
     protocol = ProxiedWSClientProtocol
     onMessage = None
     onClose = None
+    verbose = False
 
     def buildProtocol(self, addr):
-        log.msg("[DEBUG] Creating ProxiedWSClientProtocol instance ...")
         proto = self.protocol()
         proto.onMessageCallback = self.onMessage
         proto.onCloseCallback = self.onClose
@@ -73,14 +85,19 @@ class WSProxyProtocol(WebSocketServerProtocol):
     debug = False
     reactor = None
     maxQueueSize = 100
+    verbose = False
     _proxied_websocket = None
 
-    def __init__(self, ws_endpoint_str, target_url, origin=None, headers=None, reactor=None):
+    def __init__(self, 
+        ws_endpoint_str, 
+        target_url, 
+        origin=None, headers=None, verbose=False, reactor=None):
         """
         ws_endpoint_str: The proxied websocket endpoint string.
         target_url: should be a websocket URL, e.g. 'ws://127.0.0.1:9000'
         """
         WebSocketServerProtocol.__init__(self)
+        self.verbose = verbose
         self.ws_endpoint_str = ws_endpoint_str
         self.target_url = target_url
         self.origin = origin
@@ -90,15 +107,22 @@ class WSProxyProtocol(WebSocketServerProtocol):
             from twisted.internet import reactor
             self.reactor = reactor
 
+    def log(self, msg, important=False):
+        if important or self.verbose:
+            if important:
+                tag = "INFO"
+            else:
+                tag = "DEBUG"
+            log.msg("[{0}] {1}".format(tag, msg))
+
     def connectToProxiedWebsocket(self):
-        # TODO:
-        #headers = {'Origin': 'http://localhost:8888/'} #debug
         wsfactory = ProxiedWSClientProtocolFactory(
             self.target_url, 
             origin=self.origin,
             headers=self.headers,
             debug=self.debug,
         )
+        wsfactory.verbose = self.verbose
         wsfactory.onMessage = self.sendMessage
         wsfactory.onClose = self.handleClose
         e = clientFromString(self.reactor, self.ws_endpoint_str)
@@ -106,27 +130,31 @@ class WSProxyProtocol(WebSocketServerProtocol):
         d.addCallback(self.handleConnected)
          
         def _eb(err):
-            log.msg("[ERROR] {0}".format(err))
+            self.log(err, important=True)
             return err
 
         d.addErrback(_eb)
 
     def onConnect(self, r):
-        log.msg("[EVENT] onConnect()")
+        self.log("Accepted connection to web socket (proxy for {0}).".format(self.target_url))
         self.connectToProxiedWebsocket()
 
     def handleConnected(self, proto):
-        log.msg("[EVENT] connected to proxied websocket.")
+        self.log("Connected to proxied websocket => {0}.".format(
+            self.target_url))
         self._proxied_websocket = proto
         for payload, isBinary in self._queue:
-            log.msg("[DEBUG] iSending queued message to proxied websocket.")
+            self.log("Sending queued message to proxied websocket ({0}).".format(
+                self.target_url))
             proto.sendMessageToProxiedWS(payload, isBinary)
         self._queue = []
         
     def onMessage(self, payload, isBinary):
-        log.msg("[EVENT] onMessage()")
+        self.log("Proxy websocket received message for {0}.".format(
+            self.target_url))
         if not isBinary:
-            log.msg("[DEBUG] message payload='{0}'".format(payload))
+            self.log("websocket='{0}' message='{1}'".format(
+                self.target_url, payload))
         if self._proxied_websocket is not None:
             self._proxied_websocket.sendMessageToProxiedWS(payload, isBinary)
         else:
@@ -137,16 +165,18 @@ class WSProxyProtocol(WebSocketServerProtocol):
                 raise Exception("Queue overflow.")
 
     def handleClose(self, wasClean, code, reason):
-        log.msg("[EVENT] proxied websocket closed connection.  reason='{0}'".format(reason))
-        #code = self.CLOSE_STATUS_CODE_GOING_AWAY
-        #self.sendClose(code, reason)
+        self.log("Proxied websocket ({0}) closed connection.  reason='{1}'".format(
+            self.target_url, reason))
         self._proxied_websocket = None
 
 
 def _strip_query(url):
     p = urlparse.urlparse(url)
     temp = list(p)
+    temp[3] = ''
     temp[4] = ''
+    temp[5] = ''
+    temp = temp[:6]
     return urlparse.urlunparse(temp)
 
 def makeWebsocketProxyResource(
@@ -156,21 +186,20 @@ def makeWebsocketProxyResource(
         request,
         origin=None, 
         reactor=None, 
-        debug=False):
-    log.msg("[DEBUG] proxied_ws_endpoint_str='{0}'".format(proxied_ws_endpoint_str))
+        verbose=False):
     proxy_url = _strip_query(proxy_url)
     headers = dict((k, ' '.join(v)) for k, v in request.requestHeaders.getAllRawHeaders()
                 if k in ['Cookie'])
-    log.msg("[DEBUG] headers => {0}".format(headers))
     factory = WebSocketServerFactory(
         proxy_url,
-        debug=debug,
-        debugCodePaths=debug)
+        debug=False,
+        debugCodePaths=False)
     factory.protocol = lambda : WSProxyProtocol(
         proxied_ws_endpoint_str, 
         proxied_url, 
         origin=origin,
         headers=headers,
+        verbose=verbose,
         reactor=reactor,
     ) 
     resource = WebSocketResource(factory)

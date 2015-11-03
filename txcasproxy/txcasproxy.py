@@ -52,6 +52,7 @@ class ProxyApp(object):
     remoteUserHeader = 'Remote-User'
     logoutPatterns = None
     logoutPassthrough = False
+    verbose = False
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
@@ -152,6 +153,14 @@ class ProxyApp(object):
             handler = self.app.route(resource_base, branch=True)(handler)
             self.static_handlers.append(handler)
 
+    def log(self, msg, important=False):
+        if important or self.verbose:
+            if important:
+                tag = "INFO"
+            else:
+                tag = "DEBUG"
+            log.msg("[{0}] {1}".format(tag, msg))
+
     def handle_port_set(self):
         fqdn = self.fqdn
         port = self.port
@@ -220,7 +229,7 @@ class ProxyApp(object):
                     new_referer = self.proxy_url_to_proxied_url(referer)
                     if new_referer is not None:
                         h[k] = [new_referer]
-                        log.msg("[DEBUG] Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
+                        self.log("Re-wrote Referer header: '%s' => '%s'" % (referer, new_referer))
                         referer_handled = True
             if not referer_handled:
                 for k in keymap['referer']:
@@ -233,43 +242,42 @@ class ProxyApp(object):
         try:
             root = etree.fromstring(data)
         except Exception as ex:
-            #log.msg("[DEBUG] Not XML.\n%s" % str(ex))
             root = None
         if (root is not None) and (root.tag == "%sLogoutRequest" % samlp_ns):
             instant = root.get('IssueInstant')
             if instant is not None:
-                #log.msg("[DEBUG] instant string == '%s'" % instant)
                 try:
                     instant = parse_date(instant)
                 except ValueError:
-                    #log.msg("[WARN] Odd issue_instant supplied: '%s'." % instant)
+                    self.log("Invalid issue_instant supplied: '{0}'.".format(instant), important=True)
                     instant = None
                 if instant is not None:
                     utcnow = datetime.datetime.utcnow()
-                    #log.msg("[DEBUG] UTC now == %s" % utcnow.strftime("%Y-%m-%dT%H:%M:%S"))
                     seconds = abs((utcnow - instant.replace(tzinfo=None)).total_seconds())
                     if seconds <= self.logout_instant_skew:
                         results = root.findall("%sSessionIndex" % samlp_ns)
                         if len(results) == 1:
                             result = results[0]
                             ticket = result.text
-                            #log.msg("[INFO] Received request to logout session with ticket '%s'." % ticket)
                             sess_uid = self.logout_tickets.get(ticket, None)
                             if sess_uid is not None:
                                 self._expired(sess_uid)
                                 return True
                             else:
-                                log.msg("[WARN] No matching session for logout request for ticket '%s'." % ticket)
+                                self.log(
+                                    ("No matching session for logout request "
+                                    "for ticket '{0}'.").format(ticket))
                     else:
-                        log.msg("[WARN] Issue instant was not within %d seconds of actual time." % self.logout_instant_skew)
+                        self.log(
+                            ("Issue instant was not within"
+                            " {0} seconds of actual time.").format(
+                                self.logout_instant_skew), important=True)
                 else:
-                    log.msg("[WARN] Could not parse issue instant.")
+                    self.log("Could not parse issue instant.", important=True)
             else:
-                log.msg("[WARN] 'IssueInstant' attribute missing from root.")
+                self.log("'IssueInstant' attribute missing from root.", important=True)
         elif root is None:
-            log.msg("[ERROR] Could not parse XML.")
-        #else:
-        #    log.msg("[DEBUG] root.tag == '%s'" % root.tag)
+            self.log("Could not parse XML.", important=True)
         return False
 
     @app.route("/", branch=True)
@@ -292,7 +300,9 @@ class ProxyApp(object):
         sess = request.getSession()
         sess_uid = sess.uid
         if not sess_uid in valid_sessions:
-            #log.msg("[DEBUG] session {0} not in valid sessions.  Will authenticate with CAS.".format(sess_uid))
+            self.log(
+                ("Session {0} not in valid sessions.  "
+                "Will authenticate with CAS.").format(sess_uid))
             if request.method == 'POST':
                 headers = request.requestHeaders
                 if headers.hasHeader("Content-Type"):
@@ -303,11 +313,7 @@ class ProxyApp(object):
                             if self._check_for_logout(request):
                                 return ""
                             else:
-                                # If reading the body failed the first time, it won't succeed later!
-                                #log.msg("[DEBUG] _check_for_logout() returned failure.")
                                 break
-                #else:
-                #    log.msg("[DEBUG] No content-type.")
             # CAS Authentication
             # Does this request have a ticket?  I.e. is it coming back from a successful
             # CAS authentication?
@@ -319,15 +325,13 @@ class ProxyApp(object):
                     ticket = values[0]
                     d = self.validate_ticket(ticket, request)
                     return d
-            # No ticket (or a problem with the ticket)?
-            # Off to CAS you go!
+            # If no ticket is present, redirect to CAS.
             d = self.redirect_to_cas_login(request)
             return d
         elif request.path == self.authInfoResource:
-            #log.msg("[DEBUG] Providing authentication info.")
+            self.log("Providing authentication info.")
             return self.deliver_auth_info(request)
         else:
-            #log.msg("[DEBUG] session {0} is in valid sessions.".format(sess_uid))
             d = self.reverse_proxy(request)
             return d
 
@@ -393,7 +397,7 @@ class ProxyApp(object):
             param_str = urlencode(qs_map, doseq=True)
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         url = urlparse.urlunparse(p)
-        #log.msg("[DEBUG] Redirecting to CAS with URL '{0}'.".format(url))
+        self.log("Redirecting to CAS with URL '{0}'.".format(url))
         d = request.redirect(url)
         return d
         
@@ -415,7 +419,9 @@ class ProxyApp(object):
         p = urlparse.urlparse(self.cas_info['service_validate_url'])
         p = urlparse.ParseResult(*tuple(p[:4] + (param_str,) + p[5:]))
         service_validate_url = urlparse.urlunparse(p)
-        #log.msg("[INFO] requesting service-validate URL '%s' ..." % service_validate_url)
+        self.log(
+            "Requesting service-validate URL => '{0}' ...".format(
+                service_validate_url))
         http_client = HTTPClient(self.agent) 
         d = http_client.get(service_validate_url)
         d.addCallback(treq.content)
@@ -423,36 +429,36 @@ class ProxyApp(object):
         return d
         
     def parse_sv_results(self, payload, service_url, ticket, request):
-        #log.msg("[INFO] Parsing /serviceValidate results  ...")
+        self.log("Parsing /serviceValidate results  ...")
         ns = self.ns
         try:
             root = etree.fromstring(payload)
         except (etree.XMLSyntaxError,) as ex:
-            log.msg((
-                    "[ERROR] error='Error parsing XML payload.' "
+            self.log((
+                    "error='Error parsing XML payload.' "
                     "service='{0}' ticket={1}'/n{2}"
-                    ).format(service_url, ticket, ex))
+                    ).format(service_url, ticket, ex), important=True)
             return self.render_template_500(request)
         if root.tag != ('%sserviceResponse' % ns):
-            log.msg((
-                    "[WARN] error='Error parsing XML payload.  No `serviceResponse`.' "
+            self.log((
+                    "error='Error parsing XML payload.  No `serviceResponse`.' "
                     "service='{0}' ticket={1}'"
-                    ).format(service_url, ticket))
+                    ).format(service_url, ticket), important=True)
             return self.render_template_403(request)
-        results = root.findall("%sauthenticationSuccess" % ns)
+        results = root.findall("{0}authenticationSuccess".format(ns))
         if len(results) != 1:
-            log.msg((
-                    "[WARN] error='Error parsing XML payload.  No `authenticationSuccess`.' "
+            self.log((
+                    "error='Error parsing XML payload.  No `authenticationSuccess`.' "
                     "service='{0}' ticket={1}'"
-                    ).format(service_url, ticket))
+                    ).format(service_url, ticket), important=True)
             return self.render_template_403(request)
         success = results[0]
-        results = success.findall("%suser" % ns)
+        results = success.findall("{0}user".format(ns))
         if len(results) != 1:
-            log.msg((
-                    "[WARN] error='Error parsing XML payload.  Not exactly 1 `user`.' "
+            self.log((
+                    "error='Error parsing XML payload.  Not exactly 1 `user`.' "
                     "service='{0}' ticket={1}'"
-                    ).format(service_url, ticket))
+                    ).format(service_url, ticket), important=True)
             return self.render_template_403(request)
         user = results[0]
         username = user.text
@@ -468,15 +474,15 @@ class ProxyApp(object):
         for ac_plugin in access_control:
             is_allowed, reason = ac_plugin.isAllowed(username, attrib_map)
             if not is_allowed:
-                log.msg((
-                        "[INFO] Access denied:  user='{username}' ac_plugin='{ac_plugin}' "
+                self.log((
+                        "Access denied:  user='{username}' ac_plugin='{ac_plugin}' "
                         "reason={reason}, service='{service}' ticket='{ticket}'"
                         ).format(
                             username=username, 
                             ac_plugin=ac_plugin.tagname, 
                             service=service_url, 
                             ticket=ticket,
-                            reason=reason))
+                            reason=reason), important=True)
                 return self.render_template_403(request, username=username, reason=reason)
         # Update session session
         valid_sessions = self.valid_sessions
@@ -511,7 +517,9 @@ class ProxyApp(object):
             logout_tickets = self.logout_tickets
             if ticket in logout_tickets:
                 del logout_tickets[ticket]
-            log.msg("[INFO] label='Expired session.' session_id='%s' username='%s'" % (uid, username))
+            self.log(
+                ("label='Expired session.' session_id='{0}' "
+                "username='{1}'").format(uid, username))
         
     def reverse_proxy(self, request, protected=True):
         if protected:
@@ -541,7 +549,7 @@ class ProxyApp(object):
         if d is not None:
             return d
         # Typical reverse proxying.    
-        #log.msg("[INFO] Proxying URL: %s" % url)
+        self.log("Proxying URL => {0}".format(url))
         http_client = HTTPClient(self.agent) 
         d = http_client.request(request.method, url, **kwds)
         def process_response(response, request):
@@ -561,12 +569,10 @@ class ProxyApp(object):
                     new_location = self.proxied_url_to_proxy_url(proxy_scheme, location)
                     if new_location is not None:
                         resp_header_map['Location'] = [new_location]
-                        #log.msg("[DEBUG] Re-wrote Location header: '%s' => '%s'" % (location, new_location))
             request.setResponseCode(response.code, message=response.phrase)
             for k,v in resp_header_map.iteritems():
                 if k == 'Set-Cookie':
                     v = self.mod_cookies(v)
-                #print("Browser Response >>> Setting response header: %s: %s" % (k, v))
                 req_resp_headers.setRawHeaders(k, v)
             return response
             
@@ -653,7 +659,7 @@ class ProxyApp(object):
                     request,
                     reactor=self.reactor, 
                     origin=origin,
-                    debug=True)
+                    verbose=self.verbose)
                 return resource
         return None
     
@@ -735,6 +741,6 @@ class ProxyApp(object):
 
     @app.handle_errors(Exception)
     def handle_uncaught_errors(self, request, failure):
-        log.msg("[ERROR] Uncaught exception: {0}".format(failure))
+        self.log("Uncaught exception: {0}".format(failure), important=True)
         return self.render_template_500(request=request, failure=failure)
 

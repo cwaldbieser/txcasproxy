@@ -40,6 +40,7 @@ class Options(usage.Options):
     optFlags = [
             ["help-plugins", None, "Help about available plugins."],
             ["debug", 'd', "Errors served as HTML."],
+            ["verbose", 'v', "Verbose logging."],
             ["logout-passthrough", None, "Pass the logout request through to backend service prior to intercepting and redirecting."],
         ]
 
@@ -202,6 +203,7 @@ class MyServiceMaker(object):
             template_dir=options['template-dir'],
             template_resource=options['template-resource'],
             debug=options['debug'],
+            verbose=options['verbose'],
             session_length=options['session-length'])
 
 
