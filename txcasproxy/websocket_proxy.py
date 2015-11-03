@@ -1,4 +1,5 @@
 
+import urlparse
 from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import (
     WebSocketServerFactory,
@@ -74,7 +75,7 @@ class WSProxyProtocol(WebSocketServerProtocol):
     maxQueueSize = 100
     _proxied_websocket = None
 
-    def __init__(self, ws_endpoint_str, target_url, origin=None, reactor=None):
+    def __init__(self, ws_endpoint_str, target_url, origin=None, headers=None, reactor=None):
         """
         ws_endpoint_str: The proxied websocket endpoint string.
         target_url: should be a websocket URL, e.g. 'ws://127.0.0.1:9000'
@@ -83,16 +84,19 @@ class WSProxyProtocol(WebSocketServerProtocol):
         self.ws_endpoint_str = ws_endpoint_str
         self.target_url = target_url
         self.origin = origin
+        self.headers = headers
         self._queue = []
         if self.reactor is None:
             from twisted.internet import reactor
             self.reactor = reactor
 
     def connectToProxiedWebsocket(self):
+        # TODO:
         #headers = {'Origin': 'http://localhost:8888/'} #debug
         wsfactory = ProxiedWSClientProtocolFactory(
             self.target_url, 
             origin=self.origin,
+            headers=self.headers,
             debug=self.debug,
         )
         wsfactory.onMessage = self.sendMessage
@@ -139,14 +143,25 @@ class WSProxyProtocol(WebSocketServerProtocol):
         self._proxied_websocket = None
 
 
+def _strip_query(url):
+    p = urlparse.urlparse(url)
+    temp = list(p)
+    temp[4] = ''
+    return urlparse.urlunparse(temp)
+
 def makeWebsocketProxyResource(
         proxy_url, 
         proxied_ws_endpoint_str, 
         proxied_url, 
+        request,
         origin=None, 
         reactor=None, 
         debug=False):
     log.msg("[DEBUG] proxied_ws_endpoint_str='{0}'".format(proxied_ws_endpoint_str))
+    proxy_url = _strip_query(proxy_url)
+    headers = dict((k, ' '.join(v)) for k, v in request.requestHeaders.getAllRawHeaders()
+                if k in ['Cookie'])
+    log.msg("[DEBUG] headers => {0}".format(headers))
     factory = WebSocketServerFactory(
         proxy_url,
         debug=debug,
@@ -155,6 +170,7 @@ def makeWebsocketProxyResource(
         proxied_ws_endpoint_str, 
         proxied_url, 
         origin=origin,
+        headers=headers,
         reactor=reactor,
     ) 
     resource = WebSocketResource(factory)

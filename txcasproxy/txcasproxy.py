@@ -648,6 +648,7 @@ class ProxyApp(object):
                     proxy_url, 
                     proxied_endpoint_str, 
                     proxied_url, 
+                    request,
                     reactor=self.reactor, 
                     origin=origin,
                     debug=True)
