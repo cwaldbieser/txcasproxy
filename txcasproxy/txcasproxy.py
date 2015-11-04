@@ -219,7 +219,7 @@ class ProxyApp(object):
             for k in keymap['content-length']:
                 del h[k]
         if 'referer' in keymap:
-            referrer_handled = False 
+            referer_handled = False 
             keys = keymap['referer']
             if len(keys) == 1:
                 k = keys[0]
