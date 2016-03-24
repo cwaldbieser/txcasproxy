@@ -60,7 +60,8 @@ class Options(usage.Options):
                         ["template-dir", "t", None, "Folder containing templates."],
                         ["template-resource", "T", "/_templates", "Base resource for templates."],
                         ["session-length", "S", 900, "Session length in seconds."],
-                        ["client-endpoint", "C", None, "An endpoint connection string for the proxy web client."],
+                        ["proxy-client-endpoint", "P", None, "An endpoint connection string for the proxy web client."],
+                        ["cas-client-endpoint", "C", None, "An endpoint connection string for the back channel CAS web client."],
                     ]
 
     def __init__(self):
@@ -177,8 +178,8 @@ class MyServiceMaker(object):
                 for argstr in arglst:
                     plugin = factory.generatePlugin(argstr)
                     plugins.append(plugin)
-        authInfoEndpointStr = options['auth-info-endpoint']
-        authInfoResource = options['auth-info-resource'] 
+        auth_info_endpoint_s = options['auth-info-endpoint']
+        auth_info_resource = options['auth-info-resource'] 
         excluded_resources = options['excluded-resources']
         excluded_branches = options['excluded-branches']
         logouts = options['logouts']
@@ -194,19 +195,20 @@ class MyServiceMaker(object):
             fqdn=fqdn,
             authorities=options['authorities'],
             plugins=plugins,
-            authInfoEndpointStr=authInfoEndpointStr,
-            authInfoResource=authInfoResource,
+            auth_info_endpoint_s=auth_info_endpoint_s,
+            auth_info_resource=auth_info_resource,
             excluded_resources=excluded_resources,
             excluded_branches=excluded_branches,
             remote_user_header=options['header'],
-            logoutPatterns=logouts,
-            logoutPassthrough=options['logout-passthrough'],
+            logout_patterns=logouts,
+            logout_passthrough=options['logout-passthrough'],
             template_dir=options['template-dir'],
             template_resource=options['template-resource'],
             debug=options['debug'],
             verbose=options['verbose'],
             session_length=options['session-length'],
-            client_endpoint_s=options['client-endpoint'])
+            proxy_client_endpoint_s=options['proxy-client-endpoint'],
+            cas_client_endpoint_s=options['cas-client-endpoint'])
 
 
 # Now construct an object which *provides* the relevant interfaces

@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+from __future__ import print_function
 import Cookie
 import cookielib
 import datetime
@@ -9,7 +10,7 @@ import socket
 import sys
 from urllib import urlencode
 import urlparse
-from ca_trust import (CustomPolicyForHTTPS, WebClientEndpointFactory)
+from ca_trust import CustomPolicyForHTTPS
 from interfaces import (
         IAccessControl,
         IRProxyInfoAcceptor, 
@@ -18,6 +19,7 @@ from interfaces import (
         IStaticResourceProvider)
 import proxyutils
 from .urls import does_url_match_pattern, parse_url_pattern
+from web_client import WebClientEndpointFactory
 from websocket_proxy import makeWebsocketProxyResource
 from dateutil.parser import parse as parse_date
 from jinja2 import Environment, FileSystemLoader
@@ -47,21 +49,25 @@ class ProxyApp(object):
     renew_name = 'renew'
     pgturl_name = 'pgtUrl'
     reactor = reactor
-    authInfoResource = None
-    authInfoCallback = None
+    auth_info_resource = None
+    auth_info_callback = None
     remoteUserHeader = 'Remote-User'
-    logoutPatterns = None
-    logoutPassthrough = False
+    logout_patterns = None
+    logout_passthrough = False
     verbose = False
-    client_endpoint_s = None
+    proxy_client_endpoint_s = None
+    cas_client_endpoint_s = None
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
             excluded_resources=None, excluded_branches=None,
-            remote_user_header=None, logoutPatterns=None,
-            logoutPassthrough=False,
-            template_dir=None, template_resource='/_templates'):
-        self.logoutPassthrough = logoutPassthrough
+            remote_user_header=None, logout_patterns=None,
+            logout_passthrough=False,
+            template_dir=None, template_resource='/_templates',
+            proxy_client_endpoint_s=None, cas_client_endpoint_s=None):
+        self.proxy_client_endpoint_s = proxy_client_endpoint_s
+        self.cas_client_endpoint_s = cas_client_endpoint_s
+        self.logout_passthrough = logout_passthrough
         self.template_dir = template_dir
         if template_dir is not None:
             self.template_loader_ = FileSystemLoader(template_dir)
@@ -75,9 +81,9 @@ class ProxyApp(object):
             self.static = self.app.route(static_base, branch=True)(self.__class__.static)
             self.static_base = static_base
         self.template_resource = template_resource
-        if logoutPatterns is not None:
-            self.logoutPatterns = [parse_url_pattern(pattern) for pattern in logoutPatterns]
-        for pattern in self.logoutPatterns:
+        if logout_patterns is not None:
+            self.logout_patterns = [parse_url_pattern(pattern) for pattern in logout_patterns]
+        for pattern in self.logout_patterns:
             assert pattern is None or pattern.scheme == '', (
                 "Logout pattern '{0}' must be a relative URL.".format(pattern))
         if remote_user_header is not None:
@@ -185,7 +191,7 @@ class ProxyApp(object):
         """
         self.connectionPool = HTTPConnectionPool(self.reactor)
         if auth_files is None or len(auth_files) == 0:
-            self.agent = Agent(self.reactor, pool=self.connectionPool)
+            agent = Agent(self.reactor, pool=self.connectionPool)
         else:
             extra_ca_certs = []
             for ca_cert in auth_files:
@@ -196,15 +202,24 @@ class ProxyApp(object):
                 extra_ca_certs.append(cert)
             policy = CustomPolicyForHTTPS(extra_ca_certs)
             agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
-            self.agent = agent
-        if self.client_endpoint_s is not None:
-            self.proxyConnectionPool = HTTPConnectionPool(self.reactor)
+        if self.proxy_client_endpoint_s is not None:
             self.proxy_agent = Agent.usingEndpointFactory(
                 self.reactor,
-                WebClientEndpointFactory(self.reactor, self.client_endpoint_s),
-                pool=self.proxyConnectionPool)
+                WebClientEndpointFactory(self.reactor, self.proxy_client_endpoint_s),
+                pool=self.connectionPool)
+            print("Using endpoint-based proxy client.")
         else:
-            self.proxy_agent = self.agent
+            self.proxy_agent = agent
+            print("Using uri-based proxy client.")
+        if self.cas_client_endpoint_s is not None:
+            self.cas_agent = Agent.usingEndpointFactory(
+                self.reactor,
+                WebClientEndpointFactory(self.reactor, self.cas_client_endpoint_s),
+                pool=self.connectionPool) 
+            print("Using endpoint-based CAS client.")
+        else:
+            self.cas_agent = agent
+            print("Using uri-based CAS client.")
 
     def is_excluded(self, request):
         resource = request.path
@@ -296,14 +311,14 @@ class ProxyApp(object):
 
     @app.route("/", branch=True)
     def proxy(self, request):
-        for pattern in self.logoutPatterns:
+        for pattern in self.logout_patterns:
             if does_url_match_pattern(request.uri, pattern):
                 sess = request.getSession()
                 sess_uid = sess.uid
                 self._expired(sess_uid)
                 cas_logout = self.cas_info.get('logout_url', None)
                 if cas_logout is not None:
-                    if self.logoutPassthrough:
+                    if self.logout_passthrough:
                         d = self.reverse_proxy(request, protected=False)
                     return request.redirect(cas_logout)
                 else:
@@ -342,7 +357,7 @@ class ProxyApp(object):
             # If no ticket is present, redirect to CAS.
             d = self.redirect_to_cas_login(request)
             return d
-        elif request.path == self.authInfoResource:
+        elif request.path == self.auth_info_resource:
             self.log("Providing authentication info.")
             return self.deliver_auth_info(request)
         else:
@@ -436,7 +451,7 @@ class ProxyApp(object):
         self.log(
             "Requesting service-validate URL => '{0}' ...".format(
                 service_validate_url))
-        http_client = HTTPClient(self.agent) 
+        http_client = HTTPClient(self.cas_agent) 
         d = http_client.get(service_validate_url)
         d.addCallback(treq.content)
         d.addCallback(self.parse_sv_results, service_url, ticket, request)
@@ -511,9 +526,9 @@ class ProxyApp(object):
             'attributes': attrib_map})
         if not ticket in logout_tickets:
             logout_tickets[ticket] = sess_uid
-        authInfoCallback = self.authInfoCallback
-        if authInfoCallback is not None: 
-            authInfoCallback(username, attrib_map)
+        auth_info_callback = self.auth_info_callback
+        if auth_info_callback is not None: 
+            auth_info_callback(username, attrib_map)
         sess.notifyOnExpire(lambda: self._expired(sess_uid))
         # Reverse proxy.
         return request.redirect(service_url)
@@ -525,9 +540,9 @@ class ProxyApp(object):
             username = session_info['username']
             ticket = session_info['ticket']
             del valid_sessions[uid]
-            authInfoCallback = self.authInfoCallback
-            if authInfoCallback is not None:
-                authInfoCallback(username, None)
+            auth_info_callback = self.auth_info_callback
+            if auth_info_callback is not None:
+                auth_info_callback(username, None)
             logout_tickets = self.logout_tickets
             if ticket in logout_tickets:
                 del logout_tickets[ticket]
