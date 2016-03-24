@@ -16,7 +16,8 @@ class ProxyService(Service):
                     remote_user_header=None, logoutPatterns=None, 
                     logoutPassthrough=False,
                     template_dir=None, template_resource=None, 
-                    session_length=900, debug=False, verbose=False): 
+                    session_length=900, debug=False, verbose=False,
+                    client_endpoint_s=None): 
         session_length = int(session_length)
         self.port_s = endpoint_s
         self.authInfoEndpointStr = authInfoEndpointStr
@@ -42,6 +43,7 @@ class ProxyService(Service):
             template_resource=template_resource)
         app.verbose = verbose
         app.authInfoResource = authInfoResource
+        app.client_endpoint_s = client_endpoint_s
         root = app.app.resource()
         self.app = app
         self.site = Site(root)

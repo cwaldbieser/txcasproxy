@@ -9,7 +9,7 @@ import socket
 import sys
 from urllib import urlencode
 import urlparse
-from ca_trust import CustomPolicyForHTTPS
+from ca_trust import (CustomPolicyForHTTPS, WebClientEndpointFactory)
 from interfaces import (
         IAccessControl,
         IRProxyInfoAcceptor, 
@@ -53,6 +53,7 @@ class ProxyApp(object):
     logoutPatterns = None
     logoutPassthrough = False
     verbose = False
+    client_endpoint_s = None
     
     def __init__(self, proxied_url, cas_info, 
             fqdn=None, authorities=None, plugins=None, is_https=True,
@@ -106,7 +107,7 @@ class ProxyApp(object):
         self.fqdn = fqdn
         self.valid_sessions = {}
         self.logout_tickets = {}
-        self._make_agent(authorities)
+        self._make_agents(authorities)
         # Sort/tag plugins
         if plugins is None:
             plugins = []
@@ -176,7 +177,12 @@ class ProxyApp(object):
             plugin.handle_rproxy_info_set()
             plugin.expire_session = self._expired
 
-    def _make_agent(self, auth_files):
+    def _make_agents(self, auth_files):
+        """
+        Configure the web clients that:
+        * perform backchannel CAS ticket validation
+        * proxy the target site
+        """
         self.connectionPool = HTTPConnectionPool(self.reactor)
         if auth_files is None or len(auth_files) == 0:
             self.agent = Agent(self.reactor, pool=self.connectionPool)
@@ -191,6 +197,14 @@ class ProxyApp(object):
             policy = CustomPolicyForHTTPS(extra_ca_certs)
             agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
             self.agent = agent
+        if self.client_endpoint_s is not None:
+            self.proxyConnectionPool = HTTPConnectionPool(self.reactor)
+            self.proxy_agent = Agent.usingEndpointFactory(
+                self.reactor,
+                WebClientEndpointFactory(self.reactor, self.client_endpoint_s),
+                pool=self.proxyConnectionPool)
+        else:
+            self.proxy_agent = self.agent
 
     def is_excluded(self, request):
         resource = request.path
@@ -550,7 +564,7 @@ class ProxyApp(object):
             return d
         # Typical reverse proxying.    
         self.log("Proxying URL => {0}".format(url))
-        http_client = HTTPClient(self.agent) 
+        http_client = HTTPClient(self.proxy_agent) 
         d = http_client.request(request.method, url, **kwds)
         def process_response(response, request):
             req_resp_headers = request.responseHeaders

@@ -60,6 +60,7 @@ class Options(usage.Options):
                         ["template-dir", "t", None, "Folder containing templates."],
                         ["template-resource", "T", "/_templates", "Base resource for templates."],
                         ["session-length", "S", 900, "Session length in seconds."],
+                        ["client-endpoint", "C", None, "An endpoint connection string for the proxy web client."],
                     ]
 
     def __init__(self):
@@ -204,7 +205,8 @@ class MyServiceMaker(object):
             template_resource=options['template-resource'],
             debug=options['debug'],
             verbose=options['verbose'],
-            session_length=options['session-length'])
+            session_length=options['session-length'],
+            client_endpoint_s=options['client-endpoint'])
 
 
 # Now construct an object which *provides* the relevant interfaces
