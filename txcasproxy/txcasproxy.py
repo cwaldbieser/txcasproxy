@@ -203,23 +203,21 @@ class ProxyApp(object):
             policy = CustomPolicyForHTTPS(extra_ca_certs)
             agent = Agent(self.reactor, contextFactory=policy, pool=self.connectionPool)
         if self.proxy_client_endpoint_s is not None:
+            self.proxyConnectionPool = HTTPConnectionPool(self.reactor)
             self.proxy_agent = Agent.usingEndpointFactory(
                 self.reactor,
                 WebClientEndpointFactory(self.reactor, self.proxy_client_endpoint_s),
-                pool=self.connectionPool)
-            print("Using endpoint-based proxy client.")
+                pool=self.proxyConnectionPool)
         else:
             self.proxy_agent = agent
-            print("Using uri-based proxy client.")
         if self.cas_client_endpoint_s is not None:
+            self.casConnectionPool = HTTPConnectionPool(self.reactor)
             self.cas_agent = Agent.usingEndpointFactory(
                 self.reactor,
                 WebClientEndpointFactory(self.reactor, self.cas_client_endpoint_s),
-                pool=self.connectionPool) 
-            print("Using endpoint-based CAS client.")
+                pool=self.casConnectionPool) 
         else:
             self.cas_agent = agent
-            print("Using uri-based CAS client.")
 
     def is_excluded(self, request):
         resource = request.path
@@ -581,6 +579,7 @@ class ProxyApp(object):
         self.log("Proxying URL => {0}".format(url))
         http_client = HTTPClient(self.proxy_agent) 
         d = http_client.request(request.method, url, **kwds)
+
         def process_response(response, request):
             req_resp_headers = request.responseHeaders
             resp_code = response.code

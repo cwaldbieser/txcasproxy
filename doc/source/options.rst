@@ -6,37 +6,42 @@ Options
 
     Usage: twistd [options] casproxy [options]
     Options:
-          --help-plugins           Help about available plugins.
-      -d, --debug                  Errors served as HTML.
-          --logout-passthrough     Pass the logout request through to backend
-                                   service prior to intercepting and redirecting.
-      -e, --endpoint=              An endpoint connection string.
-      -p, --proxied-url=           The base URL to proxy.
-      -c, --cas-login=             The CAS /login URL.
-      -s, --cas-service-validate=  The CAS /serviceValidate URL.
-      -l, --cas-logout=            The CAS /logout URL.  Requires `logout` option to
-                                   be set.
-      -H, --header=                The name of the header in which to pass the
-                                   authenticated user ID. [default: REMOTE_USER]
-          --fqdn=                  Explicitly specify the FQDN that should be
-                                   included in URL callbacks.
-      -a, --auth-info-endpoint=    Endpoint for the authentication info service.
-      -A, --auth-info-resource=    Resource on the main site that provides
-                                   authentication info.
-          --help-plugin=           Help or a specific plugin.
-      -t, --template-dir=          Folder containing templates.
-      -T, --template-resource=     Base resource for templates. [default:
-                                   /_templates]
-      -S, --session-length=        Session length in seconds. [default: 900]
-          --help                   Display this help and exit.
-          --plugin=                Include a plugin.
-          --version                Display Twisted version and exit.
-          --addCA=                 Add a trusted CA public cert (PEM format).
-          --exclude=               Exclude a specific resource from being proxied.
-      -L, --logout=                Add a logout resource pattern to intercept and
-                                   terminate the proxy session.
-          --excludeBranch=         Exclude a resource and all its children from
-                                   being proxied
+          --help-plugins            Help about available plugins.
+      -d, --debug                   Errors served as HTML.
+      -v, --verbose                 Verbose logging.
+          --logout-passthrough      Pass the logout request through to backend
+                                    service prior to intercepting and redirecting.
+      -e, --endpoint=               An endpoint connection string.
+      -p, --proxied-url=            The base URL to proxy.
+      -c, --cas-login=              The CAS /login URL.
+      -s, --cas-service-validate=   The CAS /serviceValidate URL.
+      -l, --cas-logout=             The CAS /logout URL.  Requires `logout` option
+                                    to be set.
+      -H, --header=                 The name of the header in which to pass the
+                                    authenticated user ID. [default: REMOTE_USER]
+          --fqdn=                   Explicitly specify the FQDN that should be
+                                    included in URL callbacks.
+      -a, --auth-info-endpoint=     Endpoint for the authentication info service.
+      -A, --auth-info-resource=     Resource on the main site that provides
+                                    authentication info.
+          --help-plugin=            Help or a specific plugin.
+      -t, --template-dir=           Folder containing templates.
+      -T, --template-resource=      Base resource for templates. [default:
+                                    /_templates]
+      -S, --session-length=         Session length in seconds. [default: 900]
+      -P, --proxy-client-endpoint=  An endpoint connection string for the proxy web
+                                    client.
+      -C, --cas-client-endpoint=    An endpoint connection string for the back
+                                    channel CAS web client.
+          --help                    Display this help and exit.
+          --plugin=                 Include a plugin.
+          --version                 Display Twisted version and exit.
+          --addCA=                  Add a trusted CA public cert (PEM format).
+          --exclude=                Exclude a specific resource from being proxied.
+      -L, --logout=                 Add a logout resource pattern to intercept and
+                                    terminate the proxy session.
+          --excludeBranch=          Exclude a resource and all its children from
+                                    being proxied
 
 -----------------------
 Endpoint Specifications
@@ -44,6 +49,39 @@ Endpoint Specifications
 
 Endpoints are string descriptions of a socket connection a client or
 server makes.  For more details, see the `Twisted endpoints documentation`_.
+
+-----------
+TLS Options
+-----------
+
+Whenever the software attempts to make an HTTPS connection to a proxied site or
+to a CAS service, it must establish a trust model based on certificates that
+are signed by some authority.  By default, the service uses the platform's
+underlying certificate authority (CA) trust store.  You can extend the 
+default trust store using the :option:`addCA` option.
+
+You can exercise complete and independent control over the trust stores for the
+CAS web client and/or the proxy web client by specifying `client TLS endpoints`_.
+Client endpoints allow you to control many aspects of the underlying connection,
+including client certificates, trust roots, and even the type of underlying
+connetion (e.g. TCP IP address or UNIX domain socket).
+
+.. note::
+
+    Client endpoints do *not* work in conjunction with the 
+    :option:`addCA` option.  That option only affects the default web client.
+
+''''''''''''''''''''''''
+More on Client Endpoints
+''''''''''''''''''''''''
+
+Because client endpoints must necessarilly specify the connection details, the
+scheme, host, and port of the URL become superfluous.  When using client 
+endpoints it is therefore permissable (and preferable) to omit the URL scheme,
+host, and port.  E.g. '///cas/serviceValidate' rather than 
+'https://cas.example.net:443/cas/serviceValidate'.  In fact, if a client
+endpoint is used, those parts of the actual URL will be ignored when retieving
+the resource.
 
 ----------------------
 The REMOTE_USER Header
@@ -161,4 +199,5 @@ and can be used as a prefix for static resources (the prefix includes a trailing
 
 
 .. _Twisted endpoints documentation: https://twistedmatrix.com/documents/current/core/howto/endpoints.html
+.. _client TLS endpoints: https://twistedmatrix.com/documents/current/core/howto/endpoints.html#clients
 .. _Jinja2 templates: http://jinja.pocoo.org/
