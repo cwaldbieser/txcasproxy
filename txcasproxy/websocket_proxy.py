@@ -190,10 +190,7 @@ def makeWebsocketProxyResource(
     proxy_url = _strip_query(proxy_url)
     headers = dict((k, ' '.join(v)) for k, v in request.requestHeaders.getAllRawHeaders()
                 if k in ['Cookie'])
-    factory = WebSocketServerFactory(
-        proxy_url,
-        debug=False,
-        debugCodePaths=False)
+    factory = WebSocketServerFactory(proxy_url)
     factory.protocol = lambda : WSProxyProtocol(
         proxied_ws_endpoint_str, 
         proxied_url, 
