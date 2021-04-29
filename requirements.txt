@@ -6,7 +6,7 @@ cffi==1.1.2
 characteristic==14.3.0
 cryptography==3.3.2
 klein==15.0.0
-lxml==3.4.4
+lxml==4.6.3
 pyOpenSSL==0.15.1
 pyasn1==0.1.8
 pyasn1-modules==0.0.6
