@@ -20,7 +20,7 @@ MarkupSafe==0.23
 enum34==1.0.4
 idna==2.0
 ipaddress==1.0.14
-requests==2.7.0
+requests==2.20.0
 PyYAML==5.4
 treq==15.0.0
 autobahn==20.12.3
