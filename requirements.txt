@@ -1,5 +1,5 @@
 Jinja2==2.11.3
-Twisted==16.0.0
+Twisted==22.1.0
 Werkzeug==0.15.3
 argparse==1.2.1
 cffi==1.1.2
