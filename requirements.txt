@@ -22,6 +22,6 @@ idna==2.0
 ipaddress==1.0.14
 requests==2.31.0
 PyYAML==5.4
-treq==15.0.0
+treq==22.1.0
 autobahn==20.12.3
 txaio==2.2.2
